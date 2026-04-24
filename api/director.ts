@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { completeDsl, selectedProvider, type DirectorRequest } from '../server/directorCore';
+import { completeDsl, selectedProvider, type DirectorRequest } from '../server/directorCore.js';
 
 type VercelRequest = IncomingMessage & {
   body?: unknown;
