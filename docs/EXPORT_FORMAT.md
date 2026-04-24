@@ -76,7 +76,8 @@ Forward-compatible readers should ignore unknown fields, clamp unsupported appea
 - `gif`: offscreen render piped through `gifenc` (`src/export/renderWorkers/gif.ts`). A global palette is quantized from the first frame and reused for every subsequent frame so colors do not flicker between frames.
 - `png-seq`: renders every scene tick to an offscreen canvas and bundles the PNG frames into a STORE-method ZIP (`src/export/renderWorkers/pngSequence.ts` + in-tree ZIP writer at `src/export/zipStore.ts`). Includes a `manifest.json` describing frame count, tick rate, and resolution.
 - `loop-url`: serializes the bundle, gzip-compresses it via `CompressionStream`, and base64-urlencodes the payload into a URL fragment on `/play.html` (`src/export/loopUrl.ts`). No server required. The URL is copied to the clipboard automatically.
-- Export surface queue: `svg` remains `planned`.
+- `svg`: animated SVG via SMIL `<animate>` opacity keyframes per lit cell (`src/export/renderWorkers/svg.ts`). The duration matches the scene, `repeatCount="indefinite"` so the SVG loops forever when opened in a browser. `exportSvgPoster` produces a `.poster.svg` still of the peak-activity frame for thumbnail use.
+- Export queue: all targets are `ready`.
 
 ## Validation
 

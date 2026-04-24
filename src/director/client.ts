@@ -19,7 +19,7 @@ import { isWebmExportSupported, renderWebmClip } from '../export/renderWorkers/w
 import { isMp4ExportSupported, renderMp4Clip } from '../export/renderWorkers/mp4';
 import { renderGifClip } from '../export/renderWorkers/gif';
 import { buildLoopUrl, type LoopUrlResult } from '../export/loopUrl';
-import { renderSvgPoster, svgFileName } from '../export/renderWorkers/svg';
+import { renderSvgAnimation, renderSvgPoster, svgFileName } from '../export/renderWorkers/svg';
 
 export type DirectorRequest = {
   prompt: string;
@@ -142,6 +142,16 @@ export async function exportGif(
   downloadBlobObject(`${safeStem(bundle.scene.name)}.gif`, blob);
 }
 
+export function exportSvgAnimation(sceneName: string, dsl: string, appearance: Appearance) {
+  const bundle = buildPhosphorBundle({ sceneName, dsl, appearance });
+  const svg = renderSvgAnimation({
+    sceneName: bundle.scene.name,
+    dsl: bundle.scene.source,
+    appearance: bundle.appearance,
+  });
+  downloadBlobObject(svgFileName(bundle.scene.name), new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+}
+
 export function exportSvgPoster(sceneName: string, dsl: string, appearance: Appearance) {
   const bundle = buildPhosphorBundle({ sceneName, dsl, appearance });
   const svg = renderSvgPoster({
@@ -149,7 +159,10 @@ export function exportSvgPoster(sceneName: string, dsl: string, appearance: Appe
     dsl: bundle.scene.source,
     appearance: bundle.appearance,
   });
-  downloadBlobObject(svgFileName(bundle.scene.name), new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+  downloadBlobObject(
+    svgFileName(bundle.scene.name, 'poster'),
+    new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
+  );
 }
 
 export async function exportLoopUrl(

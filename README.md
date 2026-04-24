@@ -13,7 +13,7 @@ Phosphor is a terminal-native motion design tool for motion designers and termin
 - `.me` import/export, versioned `.phosphor.json` bundles, self-contained HTML export, PNG sequence and WebM render workers, and a standalone `phosphor-player.js` web component (with a runnable demo at `/examples/web-player/`).
 - 99-scene library across boot, loading, transitions, alerts, reveals, and backdrops, with engine-rendered thumbnails and fork workflow.
 - Addressable product surfaces: `#start`, `#library`, `#effects`, `#assets`, `#export`, `#admin`, `#settings`, `#empty`.
-- Ready local exports: `.me`, `.phosphor.json`, HTML, PNG sequence (ZIP), WebM, MP4, GIF, loop URL (client-side gzip+base64 share). Planned: SVG.
+- Ready local exports: `.me`, `.phosphor.json`, HTML, PNG sequence (ZIP), WebM, MP4, GIF, animated SVG (with still `.poster.svg` variant), loop URL (client-side gzip+base64 share). Full queue shipped.
 - Recent-scene persistence in localStorage plus an IndexedDB scene store for the future local-first library.
 
 ## Run Locally

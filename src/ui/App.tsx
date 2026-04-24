@@ -8,7 +8,7 @@ import {
   exportMeFile,
   exportMp4,
   exportPngSequence,
-  exportSvgPoster,
+  exportSvgAnimation,
   exportWebm,
   isMp4ExportSupported,
   isWebmExportSupported,
@@ -227,8 +227,8 @@ export function App() {
       return;
     }
     if (target === 'svg') {
-      exportSvgPoster(scene.name, dsl, appearance);
-      markJobDone(job.id, 'SVG poster (peak-intensity frame) exported.');
+      exportSvgAnimation(scene.name, dsl, appearance);
+      markJobDone(job.id, 'Animated SVG exported (SMIL opacity keyframes per cell).');
       return;
     }
     if (target === 'loop-url') {

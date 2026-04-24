@@ -27,7 +27,7 @@ export const EXPORT_TARGETS: Array<{
   { target: 'gif', label: 'GIF', priority: 6, status: 'ready', note: 'Offscreen render with quantized palette via gifenc.' },
   { target: 'png-seq', label: 'PNG sequence', priority: 7, status: 'ready', note: 'Offscreen per-tick render zipped for frame tooling.' },
   { target: 'loop-url', label: 'Loop URL', priority: 8, status: 'ready', note: 'Client-side gzip + base64 fragment on /play.html — no server required.' },
-  { target: 'svg', label: 'SVG', priority: 9, status: 'ready', note: 'Peak-intensity poster with bloom filter; animated SVG is a future extension.' },
+  { target: 'svg', label: 'SVG', priority: 9, status: 'ready', note: 'Animated SVG with SMIL keyframes per lit cell; poster fallback for single-tick scenes.' },
 ];
 
 export function createExportJob(target: ExportTarget, label: string, ready: boolean): ExportJob {

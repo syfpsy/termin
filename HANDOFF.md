@@ -27,7 +27,8 @@ Phosphor is a terminal-native motion design tool for motion designers and termin
 - `src/export/renderWorkers/pngSequence.ts`: renders PNG frames and bundles them (plus a `manifest.json`) into a ZIP.
 - `src/export/renderWorkers/webm.ts`: WebM capture with VP9 → VP8 → generic codec fallback.
 - `src/export/renderWorkers/mp4.ts`: MP4 capture with H.264 (AVC) codec detection, Chrome/Edge/Safari 14.1+.
-- `src/export/renderWorkers/gif.ts`: frame-accurate GIF encoding via `gifenc` with a quantized global palette.
+- `src/export/renderWorkers/gif.ts`: frame-accurate GIF encoding via `gifenc` with a per-frame quantized palette.
+- `src/export/renderWorkers/svg.ts`: `renderSvgAnimation` emits animated SVG with SMIL `<animate>` keyframes per lit cell; `renderSvgPoster` emits the peak-activity frame as a still vector.
 - `public/play.html`: standalone loop-URL playback page. Self-decodes `#play=gz.<base64>` or `#play=raw.<base64>` and mounts `<phosphor-player>` with the inline bundle.
 - `public/examples/web-player/`: live demo of the drop-in contract (the index.html imports `/phosphor-player.js` as any external site would).
 - `public/schemas/phosphor.bundle.v1.schema.json`: JSON Schema for external tooling.
@@ -71,8 +72,8 @@ Local app:
 
 ## Known Status
 
-- Real local exports: `.me`, `.phosphor.json`, `.html`, `.png-seq.zip`, `.webm`, `.mp4`, `.gif`, loop URL (client-side share).
-- Planned export queue targets: `SVG`.
+- Real local exports: `.me`, `.phosphor.json`, `.html`, `.png-seq.zip`, `.webm`, `.mp4`, `.gif`, animated `.svg` (+ `.poster.svg` variant), and loop URL (client-side share).
+- Planned export queue targets: none — the full matrix ships.
 - Schema v1 contract is forward-compatible: unknown top-level fields are normalized away, unknown appearance values are clamped, `schemaVersion !== 1` is rejected with a specific error. Covered by `npm run test:export`.
 - Last local verification passed: `npm run typecheck`, `npm run test:engine`, `npm run test:export`, `npm run build`.
 - Preview check: GIF renderer produced a valid `GIF89a` blob for a 100ms scene in 37ms; loop-URL round-trip compressed 3858B JSON to 1558B base64 (60% smaller) and decoded cleanly.
@@ -87,4 +88,4 @@ Local app:
 4. ~~Add schema compatibility tests when `schemaVersion` moves beyond `1`.~~ **Done 2026-04-25.** Forward-compat invariants (version rejection, unknown-field normalization, appearance clamping, missing-field errors) codified in `npm run test:export`. When v2 lands, extend these tests to cover the v2 supermsg of v1 readers.
 5. ~~Decide whether hosted loop URLs should store bundles in Vercel Blob, GitHub raw files, or another storage layer.~~ **Decided 2026-04-25: client-side fragment encoding first.** `/play.html#play=gz.<base64>` carries the whole bundle in the URL. No server, no auth, fully portable. At ~1.5 kB fragment per typical scene it fits every URL limit. Server-backed fallback (Vercel Blob) is deferred until a real scene hits the ~8 kB practical URL ceiling.
 6. ~~Build MP4 and GIF exporters on top of the existing PNG sequence frame pipeline (ffmpeg.wasm is the natural next dep).~~ **Done 2026-04-25, without ffmpeg.** MP4 uses native `MediaRecorder` with AVC detection (Chrome/Edge/Safari 14.1+); GIF uses `gifenc` (~3 kB) with a quantized global palette for flicker-free frames. Saved ~25 MB of wasm.
-7. Remaining: SVG vector emitter (the last `planned` export target). Option to self-host ffmpeg.wasm behind a lazy import if users ever need better MP4 quality than MediaRecorder produces, or a Firefox MP4 path.
+7. ~~SVG vector emitter.~~ **Done 2026-04-25.** Animated SVG with SMIL `<animate>` per lit cell ships as the default `svg` export; a still-poster variant (`scene.poster.svg`) is still exported by `exportSvgPoster`. A 1.2 s probe scene emits ~15 kB of valid SVG with 23 `<text>` / 23 `<animate>` nodes that parse clean and animate live. Remaining as future polish: move from SMIL to CSS keyframes if SMIL is ever dropped from Chrome, and self-host ffmpeg.wasm behind a lazy import if users need higher-quality MP4 than MediaRecorder produces on Firefox.

@@ -12,7 +12,7 @@ import {
 import { renderPhosphorEmbedHtml } from '../src/export/htmlEmbed';
 import { buildStoreZip, crc32 } from '../src/export/zipStore';
 import { buildLoopUrlFromBundle, decodeLoopFragment } from '../src/export/loopUrl';
-import { renderSvgPoster, svgFileName } from '../src/export/renderWorkers/svg';
+import { renderSvgAnimation, renderSvgPoster, svgFileName } from '../src/export/renderWorkers/svg';
 
 const bundle = buildPhosphorBundle({
   sceneName: 'boot_sequence_v3',
@@ -179,7 +179,21 @@ const hostileSvg = renderSvgPoster({
 });
 assert.ok(!hostileSvg.includes('<hack>'), 'svg must escape raw < in cell text');
 assert.ok(!hostileSvg.includes('</script>'), 'svg must escape literal </script> in cell text');
+assert.equal(svgFileName('probe'), 'probe.svg', 'animated svg file name has plain .svg suffix');
+assert.equal(svgFileName('probe', 'poster'), 'probe.poster.svg', 'poster variant gets .poster.svg suffix');
+
+// animated SVG emission
+const animatedSvg = renderSvgAnimation({
+  sceneName: bundle.scene.name,
+  dsl: bundle.scene.source,
+  appearance: bundle.appearance,
+});
+assert.ok(animatedSvg.includes('<animate attributeName="fill-opacity"'), 'animated svg must declare opacity animation');
+assert.ok(animatedSvg.includes('repeatCount="indefinite"'), 'animated svg must loop forever');
+assert.ok(animatedSvg.includes(`dur="2.880s"`), 'animated svg duration must match scene duration');
+assert.ok(animatedSvg.length > svg.length, 'animated svg must be larger than the poster');
+assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts');
 
 console.log(
-  `export smoke passed: ${bundle.scene.events.length} compiled events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg ${svg.length}B`,
+  `export smoke passed: ${bundle.scene.events.length} events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg poster ${svg.length}B / animated ${animatedSvg.length}B`,
 );
