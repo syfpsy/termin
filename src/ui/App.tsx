@@ -86,6 +86,8 @@ const EFFECTS = [
   ['flash', 'screen spike'],
 ] as const;
 
+const VIEWPORT_LOCK_QUERY = '(max-width: 759px), (max-height: 519px)';
+
 export function App() {
   const [view, setView] = useState<AppView>(() => parseHashView());
   const [dsl, setDsl] = useState(loadDsl);
@@ -99,6 +101,9 @@ export function App() {
   const [playing, setPlaying] = useState(true);
   const [importError, setImportError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [viewportTooSmall, setViewportTooSmall] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(VIEWPORT_LOCK_QUERY).matches,
+  );
   const activeDsl = previewDsl ?? dsl;
   const scene = useMemo(() => parseScene(activeDsl), [activeDsl]);
   const durationTicks = Math.max(1, Math.ceil((scene.duration / 1000) * appearance.tickRate));
@@ -132,6 +137,14 @@ export function App() {
       window.history.replaceState(null, '', `${window.location.pathname}${nextHash}`);
     }
   }, [view]);
+
+  useEffect(() => {
+    const mql = window.matchMedia(VIEWPORT_LOCK_QUERY);
+    const handler = (event: MediaQueryListEvent) => setViewportTooSmall(event.matches);
+    mql.addEventListener('change', handler);
+    setViewportTooSmall(mql.matches);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     clockRef.current?.stop();
@@ -304,16 +317,25 @@ export function App() {
     setView('author');
   }
 
+  if (viewportTooSmall) {
+    return <ViewportLock />;
+  }
+
   return (
     <main className={`workspace ${view === 'author' ? '' : 'workspace--surface'}`}>
-      <header className="titlebar">
-        <div className="brand">
-          <span className="brand__mark" />
+      <header className="titlebar" aria-label="Application controls">
+        <h1 className="brand">
+          <span className="brand__mark" aria-hidden="true" />
           <span>PHOSPHOR</span>
-        </div>
+        </h1>
         <nav className="view-nav" aria-label="Phosphor surfaces">
           {NAV_ITEMS.map((item) => (
-            <button key={item.view} className={view === item.view ? 'is-active' : ''} onClick={() => setView(item.view)}>
+            <button
+              key={item.view}
+              className={view === item.view ? 'is-active' : ''}
+              aria-current={view === item.view ? 'page' : undefined}
+              onClick={() => setView(item.view)}
+            >
               {item.label}
             </button>
           ))}
@@ -348,7 +370,7 @@ export function App() {
 
       {view === 'author' ? (
         <>
-          <aside className="left-stack">
+          <aside className="left-stack" aria-label="Director and notation">
             <DirectorPanel
               dsl={dsl}
               provider={provider}
@@ -368,8 +390,8 @@ export function App() {
             />
           </aside>
 
-          <section className="preview-stage">
-            <div className="preview-toolbar">
+          <section className="preview-stage" aria-label="Live preview and transport">
+            <div className="preview-toolbar" role="toolbar" aria-label="Preview chrome and renderer">
               <Label>chrome</Label>
               <Segmented<PreviewChrome>
                 value={appearance.chrome}
@@ -414,12 +436,12 @@ export function App() {
               <EnginePreview scene={scene} appearance={appearance} renderer={renderer} tick={tick} />
             </div>
 
-            <div className="transport">
-              <Button icon={<SkipBack size={14} />} onClick={() => setTick(0)} />
+            <div className="transport" role="toolbar" aria-label="Playback transport">
+              <Button aria-label="Reset to start" icon={<SkipBack size={14} />} onClick={() => setTick(0)} />
               <Button tone="prim" icon={playing ? <Pause size={14} /> : <Play size={14} />} onClick={() => setPlaying((value) => !value)}>
                 {playing ? 'pause' : 'play'}
               </Button>
-              <Button icon={<SkipForward size={14} />} onClick={() => setTick((current) => Math.min(durationTicks - 1, current + 1))} />
+              <Button aria-label="Step forward one tick" icon={<SkipForward size={14} />} onClick={() => setTick((current) => Math.min(durationTicks - 1, current + 1))} />
               <Button icon={<RotateCcw size={14} />} active={Boolean(previewDsl)} onClick={() => setPreviewDsl(null)}>
                 commit view
               </Button>
@@ -434,7 +456,7 @@ export function App() {
             </div>
           </section>
 
-          <aside className="right-stack">
+          <aside className="right-stack" aria-label="Phosphor controls, library, and effects">
             <Panel title="PHOSPHOR" dense>
               <SliderRow label="decay" value={appearance.decay} min={0} max={800} step={10} display={`${appearance.decay}ms`} onChange={(decay) => updateAppearance({ decay })} />
               <SliderRow label="bloom" value={appearance.bloom} min={0} max={3} step={0.1} display={appearance.bloom.toFixed(1)} onChange={(bloom) => updateAppearance({ bloom })} />
@@ -487,12 +509,12 @@ export function App() {
             </Panel>
           </aside>
 
-          <section className="timeline-slot">
+          <section className="timeline-slot" aria-label="Scene timeline">
             <Timeline scene={scene} tick={tick} rate={appearance.tickRate} onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))} />
           </section>
         </>
       ) : (
-        <section className="surface-stage">
+        <section className="surface-stage" aria-label={`${view} surface`}>
           {view === 'start' && <StartSurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
           {view === 'library' && <LibrarySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
           {view === 'effects' && <EffectDetailSurface dsl={dsl} onDslChange={setDsl} />}
@@ -542,14 +564,15 @@ export function App() {
             />
           )}
           {view === 'empty' && <EmptySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
-          <aside className="surface-side">
+          <aside className="surface-side" aria-label="Scene state and recents">
             <SceneSummaryPanel scene={scene} />
             <RecentScenesPanel recents={recents} onOpen={openRecent} />
           </aside>
         </section>
       )}
 
-      <footer className="statusbar">
+      <footer className="statusbar" aria-label="Status">
+        <span className="visually-hidden">Status:</span>
         <span className="statusbar__running">running</span>
         <span>
           {appearance.tickRate} Hz - {durationTicks} ticks - 96 x 36 cells
@@ -559,6 +582,25 @@ export function App() {
           director {provider} - renderer {renderer}
         </span>
       </footer>
+    </main>
+  );
+}
+
+function ViewportLock() {
+  return (
+    <main className="viewport-lock" aria-label="Phosphor requires a larger viewport">
+      <div className="viewport-lock__panel">
+        <h1>
+          <span className="brand__mark" aria-hidden="true" />
+          PHOSPHOR
+        </h1>
+        <p className="viewport-lock__lede">Studio is desktop-first.</p>
+        <p>Open this on a viewport at least 760 × 520 (most laptops and tablets in landscape).</p>
+        <p>
+          To watch a shared scene on this device, open a Phosphor loop URL — it works at any size:
+        </p>
+        <code>termin-peach.vercel.app/play.html#play=...</code>
+      </div>
     </main>
   );
 }

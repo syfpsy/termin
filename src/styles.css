@@ -18,9 +18,17 @@
   --magenta: #E77FD9;
   --ink: #CDDDA0;
   --ink-dim: #7A8F56;
-  --ink-muted: #4a5834;
+  /* --ink-muted: text tier — must remain >= 4.5:1 against --bg / --panel for WCAG AA. */
+  --ink-muted: #7e8d56;
+  /* --ink-faint: decoration only (borders, dividers, strokes) — not for text. */
   --ink-faint: #2f3a22;
   --ink2: #FFC985;
+  --accent-soft: rgba(255, 169, 75, 0.06);
+  --accent-soft-hi: rgba(255, 169, 75, 0.08);
+  --accent-soft-active: rgba(255, 169, 75, 0.18);
+  --surface-overlay: rgba(10, 12, 9, 0.42);
+  --focus-ring: 0 0 0 2px rgba(214, 240, 74, 0.6);
+  --focus-ring-amber: 0 0 0 2px rgba(255, 169, 75, 0.55);
   --glow-phos: 0 0 4px rgba(214, 240, 74, 0.45), 0 0 10px rgba(214, 240, 74, 0.18);
   --glow-amber: 0 0 4px rgba(255, 169, 75, 0.45), 0 0 10px rgba(255, 169, 75, 0.16);
   --glow-cyan: 0 0 4px rgba(127, 227, 224, 0.45), 0 0 10px rgba(127, 227, 224, 0.16);
@@ -56,8 +64,6 @@ body {
 
 body {
   margin: 0;
-  min-inline-size: 960px;
-  min-block-size: 620px;
   background: var(--bg);
   color: var(--ink);
   overflow: hidden;
@@ -68,6 +74,89 @@ textarea,
 select,
 input {
   font: inherit;
+}
+
+/* Focus rings — keyboard-only via :focus-visible so mouse clicks don't flash a ring. */
+:where(button, a, [role='button'], [tabindex]):focus-visible {
+  outline: 2px solid var(--phos);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+:where(input, textarea, select):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Soft fade at the bottom of overflowing panels — recovers the "more here" affordance lost to invisible scrollbars. */
+.scroll-fade {
+  mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
+}
+
+.viewport-lock {
+  display: grid;
+  place-items: center;
+  inline-size: 100dvw;
+  min-block-size: 100dvh;
+  padding: clamp(16px, 6vw, 40px);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.viewport-lock__panel {
+  max-inline-size: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(18px, 4vw, 28px);
+  border: 1px solid var(--bezel);
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.viewport-lock__panel h1 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--phos);
+  text-shadow: var(--glow-phos);
+}
+
+.viewport-lock__panel p {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+.viewport-lock__lede {
+  color: var(--ink) !important;
+  font-size: 14px;
+}
+
+.viewport-lock__panel code {
+  display: block;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px dashed var(--bezel-hi);
+  color: var(--amber);
+  font-size: 11px;
+  word-break: break-all;
 }
 
 .workspace {
@@ -110,12 +199,15 @@ input {
 }
 
 .brand {
+  margin: 0;
   color: var(--phos);
   text-shadow: var(--glow-phos);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   letter-spacing: 0.2em;
+  font-size: inherit;
+  font-weight: 500;
 }
 
 .view-nav {
@@ -127,7 +219,7 @@ input {
 }
 
 .view-nav button {
-  height: 22px;
+  min-height: 28px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--ink-muted);
@@ -135,14 +227,14 @@ input {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 6px 9px;
 }
 
 .view-nav button:hover,
 .view-nav button.is-active {
   border-color: var(--bezel-hi);
   color: var(--ink2);
-  background: rgba(255, 169, 75, 0.06);
+  background: var(--accent-soft);
 }
 
 .brand__mark,
@@ -290,6 +382,15 @@ input {
   color: var(--ink);
 }
 
+.panel__title-text {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 500;
+  letter-spacing: inherit;
+  color: inherit;
+  text-transform: inherit;
+}
+
 .panel__flags {
   color: var(--ink-muted);
   margin-left: 4px;
@@ -346,7 +447,7 @@ input {
 .button--active {
   color: var(--ink2);
   border-color: var(--amber-dim);
-  background: rgba(255, 169, 75, 0.08);
+  background: var(--accent-soft-hi);
 }
 
 .button--prim {
@@ -421,7 +522,7 @@ input {
   grid-template-columns: 1fr;
   gap: 4px;
   border: 1px dashed var(--bezel);
-  background: rgba(10, 12, 9, 0.42);
+  background: var(--surface-overlay);
   padding: 7px 8px;
   font-size: 9px;
   letter-spacing: 0.12em;
@@ -543,6 +644,12 @@ input {
   outline: 0;
   background: transparent;
   color: var(--ink);
+}
+
+.director-input__box:focus-within,
+.notation-editor:focus-visible {
+  outline: 2px solid var(--phos);
+  outline-offset: 2px;
 }
 
 .director-input textarea {
@@ -740,6 +847,8 @@ input {
 .effects-panel .panel__body {
   overflow: auto;
   padding: 6px 4px;
+  mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
 }
 
 .effect-row {
@@ -1060,9 +1169,15 @@ input {
   white-space: pre-wrap;
 }
 
-.mini-preview {
+.mini-preview-slot {
   width: 100%;
   aspect-ratio: 16 / 9;
+  display: block;
+}
+
+.mini-preview {
+  width: 100%;
+  height: 100%;
   border: 1px solid var(--bezel);
   background: #050604;
   display: block;
@@ -1273,6 +1388,8 @@ input {
   flex: 1;
   overflow: auto;
   padding: 8px;
+  mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
 }
 
 .queue-job {
@@ -1446,7 +1563,7 @@ input {
 
 .admin-field input:focus {
   border-color: var(--amber-dim);
-  box-shadow: 0 0 0 2px rgba(255, 169, 75, 0.18);
+  box-shadow: var(--focus-ring-amber);
 }
 
 .admin-field input:disabled {
@@ -1492,6 +1609,8 @@ input {
   flex: 1;
   overflow: auto;
   padding: 6px;
+  mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
 }
 
 .recent-list button {

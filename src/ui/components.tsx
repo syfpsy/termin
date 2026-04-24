@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { createElement, type ButtonHTMLAttributes, type ElementType, type ReactNode } from 'react';
 import type { ToneName } from '../engine/types';
 
 type PanelProps = {
@@ -10,17 +10,29 @@ type PanelProps = {
   dense?: boolean;
   tone?: ToneName;
   className?: string;
+  titleAs?: 'h2' | 'h3' | 'h4';
   children: ReactNode;
 };
 
-export function Panel({ title, flags, tools, footer, flush, dense, tone = 'phos', className, children }: PanelProps) {
+export function Panel({
+  title,
+  flags,
+  tools,
+  footer,
+  flush,
+  dense,
+  tone = 'phos',
+  className,
+  titleAs: TitleTag = 'h2',
+  children,
+}: PanelProps) {
   return (
-    <section className={`panel ${className ?? ''}`} data-tone={tone}>
+    <section className={`panel ${className ?? ''}`} data-tone={tone} aria-label={title}>
       {(title || tools) && (
         <div className="panel__bar">
           <div className="panel__title">
-            {title && <span className="panel__signal" />}
-            {title && <span>{title}</span>}
+            {title && <span className="panel__signal" aria-hidden="true" />}
+            {title && <TitleTag className="panel__title-text">{title}</TitleTag>}
             {flags && <span className="panel__flags">{flags}</span>}
           </div>
           {tools && <div className="panel__tools">{tools}</div>}
@@ -39,13 +51,18 @@ type PhosProps = {
   tone?: ToneName | 'dim';
   size?: number;
   className?: string;
+  as?: ElementType;
 };
 
-export function Phos({ children, tone = 'phos', size = 20, className }: PhosProps) {
-  return (
-    <span className={`phos ${className ?? ''}`} data-tone={tone} style={{ fontSize: size }}>
-      {children}
-    </span>
+export function Phos({ children, tone = 'phos', size = 20, className, as = 'span' }: PhosProps) {
+  return createElement(
+    as,
+    {
+      className: `phos ${className ?? ''}`,
+      'data-tone': tone,
+      style: { fontSize: size },
+    },
+    children,
   );
 }
 
@@ -108,9 +125,11 @@ export function SliderRow({ label, value, min, max, step, display, onChange }: S
         step={step}
         type="range"
         value={value}
+        aria-label={label}
+        aria-valuetext={display}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      <strong>{display}</strong>
+      <strong aria-hidden="true">{display}</strong>
     </label>
   );
 }

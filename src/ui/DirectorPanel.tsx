@@ -187,6 +187,7 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
           <textarea
             value={input}
             placeholder="describe a motion..."
+            aria-label="Director prompt"
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {

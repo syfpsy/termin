@@ -15,6 +15,9 @@ export function NotationPanel({ dsl, scene, onChange }: NotationPanelProps) {
       <textarea
         className="notation-editor"
         spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
         value={dsl}
         onChange={(event) => onChange(event.target.value)}
         aria-label="Phosphor .me notation editor"
