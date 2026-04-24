@@ -16,6 +16,10 @@ import {
 import { renderPhosphorEmbedHtml } from '../export/htmlEmbed';
 import { renderPngSequenceZip } from '../export/renderWorkers/pngSequence';
 import { isWebmExportSupported, renderWebmClip } from '../export/renderWorkers/webm';
+import { isMp4ExportSupported, renderMp4Clip } from '../export/renderWorkers/mp4';
+import { renderGifClip } from '../export/renderWorkers/gif';
+import { buildLoopUrl, type LoopUrlResult } from '../export/loopUrl';
+import { renderSvgPoster, svgFileName } from '../export/renderWorkers/svg';
 
 export type DirectorRequest = {
   prompt: string;
@@ -101,11 +105,70 @@ export async function exportWebm(
   downloadBlobObject(`${safeStem(bundle.scene.name)}.webm`, blob);
 }
 
-export { isWebmExportSupported };
-
-export async function readMeFile(file: File) {
-  return (await readSceneFile(file)).dsl;
+export async function exportMp4(
+  sceneName: string,
+  dsl: string,
+  appearance: Appearance,
+  options: RenderExportOptions = {},
+) {
+  if (!isMp4ExportSupported()) {
+    throw new Error('This browser cannot record MP4. Try Chrome, Edge, or Safari 14.1+.');
+  }
+  const bundle = buildPhosphorBundle({ sceneName, dsl, appearance });
+  const blob = await renderMp4Clip({
+    sceneName: bundle.scene.name,
+    dsl: bundle.scene.source,
+    appearance: bundle.appearance,
+    onProgress: options.onProgress,
+    signal: options.signal,
+  });
+  downloadBlobObject(`${safeStem(bundle.scene.name)}.mp4`, blob);
 }
+
+export async function exportGif(
+  sceneName: string,
+  dsl: string,
+  appearance: Appearance,
+  options: RenderExportOptions = {},
+) {
+  const bundle = buildPhosphorBundle({ sceneName, dsl, appearance });
+  const blob = await renderGifClip({
+    sceneName: bundle.scene.name,
+    dsl: bundle.scene.source,
+    appearance: bundle.appearance,
+    onProgress: options.onProgress,
+    signal: options.signal,
+  });
+  downloadBlobObject(`${safeStem(bundle.scene.name)}.gif`, blob);
+}
+
+export function exportSvgPoster(sceneName: string, dsl: string, appearance: Appearance) {
+  const bundle = buildPhosphorBundle({ sceneName, dsl, appearance });
+  const svg = renderSvgPoster({
+    sceneName: bundle.scene.name,
+    dsl: bundle.scene.source,
+    appearance: bundle.appearance,
+  });
+  downloadBlobObject(svgFileName(bundle.scene.name), new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+}
+
+export async function exportLoopUrl(
+  sceneName: string,
+  dsl: string,
+  appearance: Appearance,
+): Promise<LoopUrlResult> {
+  const result = await buildLoopUrl({ sceneName, dsl, appearance });
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(result.url);
+    } catch {
+      // Clipboard may be blocked (permissions, insecure context). Caller still has the URL.
+    }
+  }
+  return result;
+}
+
+export { isWebmExportSupported, isMp4ExportSupported };
 
 export async function readSceneFile(file: File): Promise<{
   dsl: string;

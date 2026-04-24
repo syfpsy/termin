@@ -2,10 +2,15 @@ import { Code2, Download, FileUp, Pause, Play, RotateCcw, SkipBack, SkipForward 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   exportBundleJson,
+  exportGif,
   exportHtmlEmbed,
+  exportLoopUrl,
   exportMeFile,
+  exportMp4,
   exportPngSequence,
+  exportSvgPoster,
   exportWebm,
+  isMp4ExportSupported,
   isWebmExportSupported,
   readSceneFile,
 } from '../director/client';
@@ -199,6 +204,47 @@ export function App() {
           onProgress: (ratio) => updateJobProgress(job.id, ratio),
         }),
       );
+      return;
+    }
+    if (target === 'mp4') {
+      if (!isMp4ExportSupported()) {
+        markJobBlocked(job.id, 'This browser cannot record MP4. Try Chrome, Edge, or Safari 14.1+.');
+        return;
+      }
+      void runAsyncExport(job.id, 'Recording MP4 at scene tick rate...', () =>
+        exportMp4(scene.name, dsl, appearance, {
+          onProgress: (ratio) => updateJobProgress(job.id, ratio),
+        }),
+      );
+      return;
+    }
+    if (target === 'gif') {
+      void runAsyncExport(job.id, 'Rendering GIF with quantized palette...', () =>
+        exportGif(scene.name, dsl, appearance, {
+          onProgress: (ratio) => updateJobProgress(job.id, ratio),
+        }),
+      );
+      return;
+    }
+    if (target === 'svg') {
+      exportSvgPoster(scene.name, dsl, appearance);
+      markJobDone(job.id, 'SVG poster (peak-intensity frame) exported.');
+      return;
+    }
+    if (target === 'loop-url') {
+      setJob(job.id, { status: 'running', progress: 0.3, note: 'Compressing scene into a share URL...' });
+      void exportLoopUrl(scene.name, dsl, appearance)
+        .then((result) => {
+          const kind = result.compressed ? 'gzip' : 'raw';
+          const kb = (result.encodedLength / 1024).toFixed(1);
+          markJobDone(
+            job.id,
+            `Loop URL copied to clipboard (${kind}, ${kb} kB fragment).`,
+          );
+        })
+        .catch((error) => {
+          markJobBlocked(job.id, error instanceof Error ? error.message : 'Loop URL failed.');
+        });
       return;
     }
   }

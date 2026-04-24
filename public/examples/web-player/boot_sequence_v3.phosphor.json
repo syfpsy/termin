@@ -1,0 +1,134 @@
+{
+  "$schema": "https://phosphor.dev/schemas/phosphor.bundle.v1.json",
+  "schema": "phosphor.bundle.v1",
+  "schemaVersion": 1,
+  "createdAt": "2026-04-24T00:00:00.000Z",
+  "runtime": {
+    "engine": "phosphor",
+    "engineVersion": "0.1.0",
+    "minPlayerVersion": "0.1.0"
+  },
+  "scene": {
+    "name": "boot_sequence_v3",
+    "source": "scene boot_sequence_v3 2.4s\n# three status OKs stagger in, typed one glyph per tick\nat 0ms    type \"[OK] phosphor buffer - 240x67 cells\" slowly\nat 400ms  type \"[OK] palette loaded - 6 tones\"\nat 800ms  type \"[OK] clock locked - 30 Hz\"\n\n# warming beat - amber pulse that breathes for 600ms\nat 1200ms pulse \"[..] warming phosphor\" amber 600ms\n\n# glitch + land the system ready\nat 2000ms glitch \"SYSTEM READY\" 80ms burst\nat 2080ms reveal \"> SYSTEM READY\"\nat 2080ms cursor \"_\" blink 500ms",
+    "durationMs": 2880,
+    "grid": {
+      "cols": 96,
+      "rows": 36
+    },
+    "tickRate": 30,
+    "loop": {
+      "startMs": 0,
+      "endMs": 2880
+    },
+    "events": [
+      {
+        "id": "3-type-0",
+        "line": 3,
+        "atMs": 0,
+        "durationMs": 2334,
+        "effect": "type",
+        "target": "[OK] phosphor buffer - 240x67 cells",
+        "modifiers": "slowly",
+        "tone": "green",
+        "raw": "at 0ms    type \"[OK] phosphor buffer - 240x67 cells\" slowly"
+      },
+      {
+        "id": "4-type-400",
+        "line": 4,
+        "atMs": 400,
+        "durationMs": 967,
+        "effect": "type",
+        "target": "[OK] palette loaded - 6 tones",
+        "modifiers": "",
+        "tone": "green",
+        "raw": "at 400ms  type \"[OK] palette loaded - 6 tones\""
+      },
+      {
+        "id": "5-type-800",
+        "line": 5,
+        "atMs": 800,
+        "durationMs": 834,
+        "effect": "type",
+        "target": "[OK] clock locked - 30 Hz",
+        "modifiers": "",
+        "tone": "green",
+        "raw": "at 800ms  type \"[OK] clock locked - 30 Hz\""
+      },
+      {
+        "id": "8-pulse-1200",
+        "line": 8,
+        "atMs": 1200,
+        "durationMs": 600,
+        "effect": "pulse",
+        "target": "[..] warming phosphor",
+        "modifiers": "amber 600ms",
+        "tone": "amber",
+        "raw": "at 1200ms pulse \"[..] warming phosphor\" amber 600ms"
+      },
+      {
+        "id": "11-glitch-2000",
+        "line": 11,
+        "atMs": 2000,
+        "durationMs": 80,
+        "effect": "glitch",
+        "target": "SYSTEM READY",
+        "modifiers": "80ms burst",
+        "tone": "magenta",
+        "raw": "at 2000ms glitch \"SYSTEM READY\" 80ms burst"
+      },
+      {
+        "id": "12-reveal-2080",
+        "line": 12,
+        "atMs": 2080,
+        "durationMs": 120,
+        "effect": "reveal",
+        "target": "> SYSTEM READY",
+        "modifiers": "",
+        "tone": "phos",
+        "raw": "at 2080ms reveal \"> SYSTEM READY\""
+      },
+      {
+        "id": "13-cursor-2080",
+        "line": 13,
+        "atMs": 2080,
+        "durationMs": 800,
+        "effect": "cursor",
+        "target": "_",
+        "modifiers": "blink 500ms",
+        "tone": "phos",
+        "raw": "at 2080ms cursor \"_\" blink 500ms"
+      }
+    ]
+  },
+  "appearance": {
+    "chrome": "bezel",
+    "decay": 240,
+    "bloom": 1.8,
+    "scanlines": 0.7,
+    "curvature": 0.35,
+    "flicker": 0.12,
+    "chromatic": 0,
+    "font": "vt323",
+    "sizeScale": 1,
+    "mode": "color",
+    "tickRate": 30
+  },
+  "assets": {
+    "fonts": [
+      "vt323"
+    ],
+    "palettes": [
+      "phosphor-6"
+    ]
+  },
+  "compatibility": {
+    "deterministic": true,
+    "portableRenderer": "canvas",
+    "notes": [
+      "The scene.source field is the editable .me contract.",
+      "The scene.events array is a compiled JSON contract for web players and device runtimes.",
+      "Renderers must clamp unknown appearance fields and ignore unknown top-level fields."
+    ]
+  }
+}

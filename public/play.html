@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Phosphor Loop</title>
+    <style>
+      :root {
+        --bg: #050604;
+        --ink: #cdddA0;
+        --ink-dim: #7a8f56;
+        --phos: #d6f04a;
+        --amber: #ffa94b;
+        --red: #ff6b6b;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+        scrollbar-width: none;
+      }
+      *::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+      html,
+      body {
+        margin: 0;
+        min-block-size: 100dvh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        padding: clamp(12px, 3vw, 32px);
+      }
+      main {
+        inline-size: 100%;
+        max-inline-size: 960px;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: clamp(8px, 1.5vh, 16px);
+        min-block-size: 0;
+      }
+      header,
+      footer {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        color: var(--ink-dim);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      header strong {
+        color: var(--phos);
+        text-shadow: 0 0 4px rgba(214, 240, 74, 0.45), 0 0 10px rgba(214, 240, 74, 0.18);
+      }
+      header a,
+      footer a {
+        color: var(--amber);
+        text-decoration: none;
+      }
+      header a:hover,
+      footer a:hover {
+        text-decoration: underline;
+      }
+      section.stage {
+        display: grid;
+        place-items: center;
+        min-block-size: 320px;
+        container-type: size;
+      }
+      phosphor-player {
+        inline-size: min(100cqw, 100cqh * 4 / 3, 960px);
+        block-size: min(100cqh, 100cqw * 3 / 4, 720px);
+        border: 14px solid #1e2722;
+        border-radius: 10px;
+        box-shadow: inset 0 0 0 2px #000, inset 0 0 24px rgba(0, 0, 0, 0.7);
+        background: var(--bg);
+      }
+      .error {
+        color: var(--red);
+        font-size: 12px;
+        text-align: center;
+        padding: 18px;
+        border: 1px solid var(--red);
+      }
+      .muted {
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong>PHOSPHOR</strong>
+        <span class="muted">/</span>
+        <span id="scene-name" class="muted">loading scene</span>
+        <span class="muted">/</span>
+        <a href="/">open studio</a>
+      </header>
+
+      <section class="stage" id="stage">
+        <div class="error" id="loader">reading loop payload</div>
+      </section>
+
+      <footer>
+        <span id="stats" class="muted">decoding</span>
+      </footer>
+    </main>
+
+    <script type="module" src="/phosphor-player.js"></script>
+    <script type="module">
+      // Inline minimal decoder so this page works without a bundler step.
+      const FRAGMENT_KEY = 'play';
+
+      function base64UrlDecode(value) {
+        const pad = value.length % 4;
+        const padded = value.replace(/-/g, '+').replace(/_/g, '/') + (pad ? '='.repeat(4 - pad) : '');
+        const binary = atob(padded);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+        return out;
+      }
+
+      async function decompressGzip(data) {
+        if (typeof DecompressionStream === 'undefined') {
+          throw new Error('This browser cannot decompress gzip loop URLs. Try Chrome 80+, Firefox 113+, or Safari 16.4+.');
+        }
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      async function decodeLoop(hash) {
+        const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+        const raw = params.get(FRAGMENT_KEY);
+        if (!raw) throw new Error('Missing #play= fragment.');
+        const dotIndex = raw.indexOf('.');
+        if (dotIndex < 0) throw new Error('Malformed fragment: expected gz. or raw. prefix.');
+        const prefix = raw.slice(0, dotIndex);
+        const payload = raw.slice(dotIndex + 1);
+        const bytes = base64UrlDecode(payload);
+        if (prefix === 'gz') return new TextDecoder().decode(await decompressGzip(bytes));
+        if (prefix === 'raw') return new TextDecoder().decode(bytes);
+        throw new Error(`Unknown prefix "${prefix}".`);
+      }
+
+      async function boot() {
+        const stage = document.getElementById('stage');
+        const loader = document.getElementById('loader');
+        const stats = document.getElementById('stats');
+        const sceneName = document.getElementById('scene-name');
+
+        try {
+          const json = await decodeLoop(window.location.hash);
+          const bundle = JSON.parse(json);
+          if (bundle?.schema !== 'phosphor.bundle.v1') {
+            throw new Error(`Unsupported schema "${bundle?.schema}".`);
+          }
+          const name = bundle?.scene?.name ?? 'phosphor scene';
+          sceneName.textContent = name;
+          document.title = `Phosphor / ${name}`;
+
+          loader.remove();
+          const player = document.createElement('phosphor-player');
+          player.setAttribute('aria-label', `Phosphor scene ${name}`);
+          const inline = document.createElement('script');
+          inline.type = 'application/vnd.phosphor.bundle+json';
+          inline.textContent = json;
+          player.appendChild(inline);
+          stage.appendChild(player);
+
+          const durationSec = (bundle.scene.durationMs / 1000).toFixed(2);
+          const eventCount = bundle.scene.events?.length ?? 0;
+          stats.textContent = `${eventCount} events / ${durationSec}s / ${bundle.scene.tickRate}hz`;
+        } catch (error) {
+          loader.textContent = error instanceof Error ? error.message : String(error);
+          stats.textContent = 'decode failed';
+        }
+      }
+
+      void boot();
+    </script>
+  </body>
+</html>

@@ -7,7 +7,8 @@
     "dev": "concurrently -k -n api,web -c cyan,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite --host 127.0.0.1",
     "dev:api": "tsx watch server/director.ts",
-    "build": "tsc -b && vite build && vite build --config vite.player.config.ts",
+    "build": "tsc -b && npm run build:example && vite build && vite build --config vite.player.config.ts",
+    "build:example": "tsx scripts/build-example-bundle.ts",
     "test:engine": "tsx scripts/engine-smoke.ts",
     "test:export": "tsx scripts/export-smoke.ts",
     "typecheck": "tsc -b",
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.64.0",
+    "gifenc": "^1.0.3",
     "lucide-react": "^0.468.0",
     "openai": "^6.8.1",
     "react": "^19.0.0",

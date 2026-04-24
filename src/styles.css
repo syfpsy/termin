@@ -32,12 +32,32 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+html,
+body {
+  block-size: 100%;
+  inline-size: 100%;
 }
 
 body {
   margin: 0;
-  min-width: 1180px;
-  min-height: 760px;
+  min-inline-size: 960px;
+  min-block-size: 620px;
   background: var(--bg);
   color: var(--ink);
   overflow: hidden;
@@ -51,13 +71,14 @@ input {
 }
 
 .workspace {
-  width: 100vw;
-  height: 100vh;
+  inline-size: 100dvw;
+  block-size: 100dvh;
   display: grid;
-  grid-template-columns: 338px minmax(560px, 1fr) 286px;
-  grid-template-rows: 34px minmax(360px, 1fr) 184px 22px;
+  grid-template-columns: minmax(280px, 338px) minmax(360px, 1fr) minmax(240px, 286px);
+  grid-template-rows: 34px minmax(320px, 1fr) minmax(160px, 184px) 22px;
   gap: 1px;
   background: var(--bezel-lo);
+  overflow: hidden;
 }
 
 .titlebar,
@@ -72,6 +93,10 @@ input {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .titlebar {
@@ -187,17 +212,20 @@ input {
   min-height: 0;
   position: relative;
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr) 48px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .preview-toolbar,
 .transport {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   padding: 8px 14px;
   background: var(--bg);
   border-bottom: 1px solid var(--bezel);
+  min-width: 0;
 }
 
 .transport {
@@ -206,11 +234,13 @@ input {
 }
 
 .preview-wrap {
+  min-width: 0;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 26px 38px;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 2.4vh, 26px) clamp(14px, 3vw, 38px);
+  overflow: hidden;
+  container-type: size;
 }
 
 .timeline-slot {
@@ -614,8 +644,8 @@ input {
 }
 
 .crt {
-  width: min(100%, 840px);
-  aspect-ratio: 4 / 3;
+  inline-size: min(100cqw, 100cqh * 4 / 3, 840px);
+  block-size: min(100cqh, 100cqw * 3 / 4, 630px);
   position: relative;
   background: #050604;
   overflow: hidden;

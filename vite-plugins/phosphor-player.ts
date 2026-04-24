@@ -52,6 +52,18 @@ export function phosphorPlayerPlugin(): Plugin {
       const code = await buildOnce();
       return `export default ${JSON.stringify(code)};`;
     },
+    configureServer(server) {
+      server.middlewares.use('/phosphor-player.js', async (_req, res, next) => {
+        try {
+          const code = await buildOnce();
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(code);
+        } catch (error) {
+          next(error);
+        }
+      });
+    },
     handleHotUpdate({ file, server }) {
       const relative = file.replace(/\\/g, '/').replace(`${root.replace(/\\/g, '/')}/`, '');
       if (!WATCH_PREFIXES.some((prefix) => relative.startsWith(prefix))) return;
