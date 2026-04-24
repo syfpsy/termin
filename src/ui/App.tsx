@@ -1,5 +1,5 @@
-import { Code2, Download, FileUp, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Code2, Download, FileUp, Pause, Play, Redo2, RotateCcw, SkipBack, SkipForward, Undo2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   exportBundleJson,
   exportGif,
@@ -16,7 +16,15 @@ import {
 } from '../director/client';
 import { TickClock } from '../engine/clock';
 import { parseScene } from '../engine/dsl';
-import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, TickRate } from '../engine/types';
+import {
+  addEventToSource,
+  defaultEventTemplate,
+  deleteEventInSource,
+  moveEventInSource,
+  patchEventInSource,
+  resizeEventInSource,
+} from '../engine/dslEdit';
+import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, SceneEvent, TickRate } from '../engine/types';
 import { DEFAULT_APPEARANCE } from '../engine/types';
 import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import type { LibraryScene } from '../scenes/library';
@@ -104,11 +112,48 @@ export function App() {
   const [viewportTooSmall, setViewportTooSmall] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia(VIEWPORT_LOCK_QUERY).matches,
   );
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [timelineUnits, setTimelineUnits] = useState<'frame' | 'ms'>('frame');
+  const [past, setPast] = useState<string[]>([]);
+  const [future, setFuture] = useState<string[]>([]);
   const activeDsl = previewDsl ?? dsl;
   const scene = useMemo(() => parseScene(activeDsl), [activeDsl]);
   const durationTicks = Math.max(1, Math.ceil((scene.duration / 1000) * appearance.tickRate));
   const clockRef = useRef<TickClock | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const commitDsl = useCallback(
+    (next: string) => {
+      if (next === dsl) return;
+      setPast((prev) => [...prev, dsl].slice(-100));
+      setFuture([]);
+      setDsl(next);
+      setPreviewDsl(null);
+    },
+    [dsl],
+  );
+
+  const undo = useCallback(() => {
+    setPast((prev) => {
+      if (prev.length === 0) return prev;
+      const previous = prev[prev.length - 1];
+      setFuture((future) => [dsl, ...future].slice(0, 100));
+      setDsl(previous);
+      setPreviewDsl(null);
+      return prev.slice(0, -1);
+    });
+  }, [dsl]);
+
+  const redo = useCallback(() => {
+    setFuture((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev[0];
+      setPast((past) => [...past, dsl].slice(-100));
+      setDsl(next);
+      setPreviewDsl(null);
+      return prev.slice(1);
+    });
+  }, [dsl]);
 
   useEffect(() => saveDsl(dsl), [dsl]);
   useEffect(() => {
@@ -146,6 +191,11 @@ export function App() {
     return () => mql.removeEventListener('change', handler);
   }, []);
 
+  const selectedEvent = useMemo(
+    () => scene.events.find((event) => event.id === selectedEventId) ?? null,
+    [scene.events, selectedEventId],
+  );
+
   useEffect(() => {
     clockRef.current?.stop();
     if (!playing) return;
@@ -162,8 +212,7 @@ export function App() {
   }
 
   function commitProposal(proposal: DirectorProposal) {
-    setDsl(proposal.dsl);
-    setPreviewDsl(null);
+    commitDsl(proposal.dsl);
   }
 
   function previewProposal(proposal: DirectorProposal) {
@@ -171,9 +220,9 @@ export function App() {
   }
 
   function forkLibraryScene(libraryScene: LibraryScene) {
-    setDsl(libraryScene.dsl);
-    setPreviewDsl(null);
+    commitDsl(libraryScene.dsl);
     setTick(0);
+    setSelectedEventId(null);
   }
 
   function createJob(target: ExportTarget) {
@@ -300,10 +349,10 @@ export function App() {
     if (!file) return;
     try {
       const imported = await readSceneFile(file);
-      setDsl(imported.dsl);
+      commitDsl(imported.dsl);
       if (imported.appearance) setAppearance(imported.appearance);
-      setPreviewDsl(null);
       setImportError(null);
+      setSelectedEventId(null);
       setTick(0);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Import failed.');
@@ -311,11 +360,133 @@ export function App() {
   }
 
   function openRecent(recent: RecentScene) {
-    setDsl(recent.dsl);
-    setPreviewDsl(null);
+    commitDsl(recent.dsl);
     setTick(0);
     setView('author');
+    setSelectedEventId(null);
   }
+
+  const moveEvent = useCallback(
+    (event: SceneEvent, atMs: number) => {
+      const next = moveEventInSource({
+        source: dsl,
+        event,
+        atMs,
+        sceneDurationMs: scene.duration,
+        snapMs: 1000 / appearance.tickRate,
+      });
+      commitDsl(next);
+    },
+    [appearance.tickRate, commitDsl, dsl, scene.duration],
+  );
+
+  const resizeEvent = useCallback(
+    (event: SceneEvent, durationMs: number) => {
+      const next = resizeEventInSource({ source: dsl, event, durationMs });
+      commitDsl(next);
+    },
+    [commitDsl, dsl],
+  );
+
+  const deleteEvent = useCallback(
+    (event: SceneEvent) => {
+      const next = deleteEventInSource(dsl, event);
+      commitDsl(next);
+      setSelectedEventId(null);
+    },
+    [commitDsl, dsl],
+  );
+
+  const patchEvent = useCallback(
+    (event: SceneEvent, patch: Partial<{ atMs: number; effect: string; target: string; modifiers: string }>) => {
+      const next = patchEventInSource({
+        source: dsl,
+        event,
+        patch,
+        sceneDurationMs: scene.duration,
+      });
+      commitDsl(next);
+    },
+    [commitDsl, dsl, scene.duration],
+  );
+
+  const addEventAt = useCallback(
+    (atMs: number, effect: string) => {
+      const template = defaultEventTemplate(effect, atMs);
+      const { source: next, lineNumber } = addEventToSource({
+        source: dsl,
+        atMs,
+        effect: template.effect,
+        target: template.target,
+        modifiers: template.modifiers,
+        sceneDurationMs: scene.duration,
+        snapMs: 1000 / appearance.tickRate,
+      });
+      commitDsl(next);
+      const reparsed = parseScene(next);
+      const inserted = reparsed.events.find((evt) => evt.line === lineNumber);
+      if (inserted) setSelectedEventId(inserted.id);
+    },
+    [appearance.tickRate, commitDsl, dsl, scene.duration],
+  );
+
+  useEffect(() => {
+    function isFormElement(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      return (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      );
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === 'z') {
+        if (isFormElement(event.target)) return;
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === 'y') {
+        if (isFormElement(event.target)) return;
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (isFormElement(event.target)) return;
+
+      if (event.key === 'Escape') {
+        if (selectedEventId) {
+          event.preventDefault();
+          setSelectedEventId(null);
+        }
+        return;
+      }
+
+      if (!selectedEvent) return;
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        deleteEvent(selectedEvent);
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        const tickMs = 1000 / appearance.tickRate;
+        const stepMs = (event.shiftKey ? 10 : 1) * tickMs;
+        moveEvent(selectedEvent, selectedEvent.at + direction * stepMs);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [appearance.tickRate, deleteEvent, moveEvent, redo, selectedEvent, selectedEventId, undo]);
 
   if (viewportTooSmall) {
     return <ViewportLock />;
@@ -356,6 +527,20 @@ export function App() {
             void importScene(event.currentTarget.files?.[0]);
             event.currentTarget.value = '';
           }}
+        />
+        <Button
+          icon={<Undo2 size={13} />}
+          aria-label="Undo"
+          disabled={past.length === 0}
+          onClick={undo}
+          kbd="⌘Z"
+        />
+        <Button
+          icon={<Redo2 size={13} />}
+          aria-label="Redo"
+          disabled={future.length === 0}
+          onClick={redo}
+          kbd="⌘⇧Z"
         />
         <Button icon={<FileUp size={13} />} onClick={() => fileInputRef.current?.click()}>
           import
@@ -496,7 +681,7 @@ export function App() {
               {EFFECTS.map(([name, description]) => {
                 const used = scene.events.filter((event) => event.effect === name).length;
                 return (
-                  <button key={name} className="effect-row" onClick={() => insertEffect(name, tick, appearance.tickRate, setDsl)}>
+                  <button key={name} className="effect-row" onClick={() => addEventAt(Math.round((tick / appearance.tickRate) * 1000), name)}>
                     <span className="effect-row__glyph">{glyphFor(name)}</span>
                     <span>
                       <strong>{name}</strong>
@@ -510,7 +695,25 @@ export function App() {
           </aside>
 
           <section className="timeline-slot" aria-label="Scene timeline">
-            <Timeline scene={scene} tick={tick} rate={appearance.tickRate} onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))} />
+            <Timeline
+              scene={scene}
+              tick={tick}
+              rate={appearance.tickRate}
+              units={timelineUnits}
+              selectedEventId={selectedEventId}
+              canUndo={past.length > 0}
+              canRedo={future.length > 0}
+              onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))}
+              onUnitsChange={setTimelineUnits}
+              onSelect={setSelectedEventId}
+              onMoveEvent={moveEvent}
+              onResizeEvent={resizeEvent}
+              onDeleteEvent={deleteEvent}
+              onPatchEvent={patchEvent}
+              onAddEventAt={addEventAt}
+              onUndo={undo}
+              onRedo={redo}
+            />
           </section>
         </>
       ) : (
@@ -637,26 +840,3 @@ function glyphFor(name: string) {
   return glyphs[name] ?? '?';
 }
 
-function insertEffect(name: string, tick: number, rate: number, setDsl: (updater: (current: string) => string) => void) {
-  const at = Math.round((tick / rate) * 1000);
-  const line = effectInsertion(name, at);
-  setDsl((current) => `${current.trimEnd()}\n${line}`);
-}
-
-function effectInsertion(name: string, at: number) {
-  const insertions: Record<string, string> = {
-    type: `at ${at}ms type "new typed line" slowly`,
-    cursor: `at ${at}ms cursor "_" blink 500ms`,
-    'scan-line': `at ${at}ms scan-line row 18 400ms`,
-    glitch: `at ${at}ms glitch "SYSTEM READY" 80ms burst`,
-    pulse: `at ${at}ms pulse "new pulse" amber 600ms`,
-    'decay-trail': `at ${at}ms trail "*" path(8,25 14,23 22,22 34,20 48,18 66,16) 45ms/step`,
-    dither: `at ${at}ms dither ramp 0->1 bayer4 900ms`,
-    wave: `at ${at}ms wave "signal carrier" 1200ms`,
-    wipe: `at ${at}ms wipe "WIPE REVEAL" diagonal 500ms`,
-    loop: `at ${at}ms loop "<<< >>> <<< >>>"`,
-    shake: `at ${at}ms shake "SHAKE" 3px 200ms`,
-    flash: `at ${at}ms flash "screen" 80ms`,
-  };
-  return insertions[name] ?? `at ${at}ms ${name} "new ${name}"`;
-}

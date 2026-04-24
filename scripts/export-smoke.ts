@@ -13,6 +13,20 @@ import { renderPhosphorEmbedHtml } from '../src/export/htmlEmbed';
 import { buildStoreZip, crc32 } from '../src/export/zipStore';
 import { buildLoopUrlFromBundle, decodeLoopFragment } from '../src/export/loopUrl';
 import { renderSvgAnimation, renderSvgPoster, svgFileName } from '../src/export/renderWorkers/svg';
+import { parseScene } from '../src/engine/dsl';
+import {
+  addEventToSource,
+  clampEventTime,
+  defaultEventTemplate,
+  deleteEventInSource,
+  eventToLine,
+  formatEventLine,
+  isResizable,
+  moveEventInSource,
+  patchEventInSource,
+  resizeEventInSource,
+  setDurationModifier,
+} from '../src/engine/dslEdit';
 
 const bundle = buildPhosphorBundle({
   sceneName: 'boot_sequence_v3',
@@ -193,6 +207,126 @@ assert.ok(animatedSvg.includes('repeatCount="indefinite"'), 'animated svg must l
 assert.ok(animatedSvg.includes(`dur="2.880s"`), 'animated svg duration must match scene duration');
 assert.ok(animatedSvg.length > svg.length, 'animated svg must be larger than the poster');
 assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts');
+
+// DSL editing primitives — round-trip through parse to confirm identity preservation
+{
+  const initial = `scene edit_probe 2s\n# stage one\nat 0ms type "BOOT" slowly\nat 600ms pulse "warming" amber 400ms`;
+  const parsed = parseScene(initial);
+  assert.equal(parsed.events.length, 2, 'baseline parse must see 2 events');
+
+  // formatEventLine round-trip
+  const reformatted = eventToLine(parsed.events[0]);
+  assert.ok(reformatted.startsWith('at 0ms type'), 'format must place time + effect');
+  assert.ok(reformatted.includes('"BOOT"'), 'format must quote the target');
+  assert.ok(reformatted.includes('slowly'), 'format must preserve modifiers');
+
+  // move
+  const moved = moveEventInSource({ source: initial, event: parsed.events[1], atMs: 1500, sceneDurationMs: 2000 });
+  const movedScene = parseScene(moved);
+  assert.equal(movedScene.events[1].at, 1500, 'move must update at time');
+  assert.equal(movedScene.events.length, 2, 'move must not change event count');
+  assert.ok(moved.includes('# stage one'), 'move must preserve comments');
+
+  // clamp + snap
+  assert.equal(clampEventTime(-100, 1000), 0, 'negative time clamps to 0');
+  assert.equal(clampEventTime(1500, 1000), 1000, 'overflow clamps to scene duration');
+  assert.equal(clampEventTime(317, 2000, 100), 300, 'snap rounds to nearest grid');
+
+  // resize
+  const resized = resizeEventInSource({ source: initial, event: parsed.events[1], durationMs: 900 });
+  const resizedScene = parseScene(resized);
+  assert.ok(resizedScene.events[1].modifiers.includes('900ms'), 'resize must update duration token');
+  assert.ok(!resizedScene.events[1].modifiers.includes('400ms'), 'resize must replace prior duration token');
+
+  // resize on a non-resizable effect (type) is a no-op
+  const noop = resizeEventInSource({ source: initial, event: parsed.events[0], durationMs: 999 });
+  assert.equal(noop, initial, 'resize on type must be a no-op');
+  assert.equal(isResizable('type'), false, 'type is not resizable');
+  assert.equal(isResizable('pulse'), true, 'pulse is resizable');
+
+  // setDurationModifier inserts when missing
+  assert.equal(setDurationModifier('amber', 250), 'amber 250ms', 'duration appended when absent');
+  assert.equal(setDurationModifier('amber 400ms', 250), 'amber 250ms', 'first duration token replaced');
+  assert.equal(setDurationModifier('', 250), '250ms', 'empty modifiers gets a single duration');
+
+  // delete
+  const deleted = deleteEventInSource(initial, parsed.events[0]);
+  const deletedScene = parseScene(deleted);
+  assert.equal(deletedScene.events.length, 1, 'delete must remove the event line');
+  assert.equal(deletedScene.events[0].effect, 'pulse', 'remaining event must be the pulse');
+
+  // patch — change target text + tone
+  const patched = patchEventInSource({
+    source: initial,
+    event: parsed.events[1],
+    patch: { target: 'COOLING', modifiers: 'cyan 350ms' },
+    sceneDurationMs: 2000,
+  });
+  const patchedScene = parseScene(patched);
+  assert.equal(patchedScene.events[1].target, 'COOLING', 'patch must rewrite target');
+  assert.ok(patchedScene.events[1].modifiers.includes('cyan'), 'patch must rewrite modifiers');
+  assert.equal(patchedScene.events[1].at, 600, 'patch without atMs must keep time');
+
+  // patch sanitizes quotes in target so source still parses
+  const sanitized = patchEventInSource({
+    source: initial,
+    event: parsed.events[0],
+    patch: { target: 'A "hostile" "name"' },
+    sceneDurationMs: 2000,
+  });
+  const sanitizedScene = parseScene(sanitized);
+  assert.equal(sanitizedScene.lines.filter((line) => line.kind === 'invalid').length, 0, 'sanitized source must parse');
+  assert.ok(!sanitizedScene.events[0].target.includes('"'), 'patched target must drop literal quotes');
+
+  // add
+  const { source: added, lineNumber } = addEventToSource({
+    source: initial,
+    atMs: 1900,
+    effect: 'glitch',
+    target: 'FAULT',
+    modifiers: '120ms burst',
+    sceneDurationMs: 2000,
+  });
+  const addedScene = parseScene(added);
+  assert.equal(addedScene.events.length, 3, 'add must produce a third event');
+  assert.equal(addedScene.events[2].effect, 'glitch', 'added event must be glitch');
+  assert.equal(addedScene.events[2].at, 1900, 'added event must respect atMs');
+  assert.ok(typeof lineNumber === 'number' && lineNumber > 0, 'add must return a line number');
+
+  // add clamps over-duration time
+  const { source: addedClamped } = addEventToSource({
+    source: initial,
+    atMs: 9_999_999,
+    effect: 'flash',
+    target: 'screen',
+    sceneDurationMs: 2000,
+  });
+  const addedClampedScene = parseScene(addedClamped);
+  assert.ok(
+    addedClampedScene.events.every((event) => event.at <= 2000),
+    'add must clamp atMs to scene duration',
+  );
+
+  // formatEventLine produces lines that re-parse identically
+  const sample = formatEventLine({ atMs: 750, effect: 'wave', target: 'signal', modifiers: '900ms' });
+  const reparsed = parseScene(`scene rt 1s\n${sample}`);
+  assert.equal(reparsed.events.length, 1, 'formatted line must parse to one event');
+  assert.equal(reparsed.events[0].at, 750, 'formatted time must round-trip');
+  assert.equal(reparsed.events[0].effect, 'wave', 'formatted effect must round-trip');
+
+  // defaultEventTemplate produces parseable lines for every catalogued effect
+  const effects = ['type', 'cursor', 'scan-line', 'glitch', 'pulse', 'decay-trail', 'dither', 'wave', 'wipe', 'loop', 'shake', 'flash'];
+  for (const effect of effects) {
+    const template = defaultEventTemplate(effect, 200);
+    const line = formatEventLine(template);
+    const parsedTemplate = parseScene(`scene t 800ms\n${line}`);
+    assert.equal(
+      parsedTemplate.lines.filter((l) => l.kind === 'invalid').length,
+      0,
+      `template for ${effect} must parse cleanly`,
+    );
+  }
+}
 
 console.log(
   `export smoke passed: ${bundle.scene.events.length} events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg poster ${svg.length}B / animated ${animatedSvg.length}B`,
