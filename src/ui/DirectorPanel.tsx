@@ -1,0 +1,202 @@
+import { Bot, Check, Eye, RefreshCw, Send, WandSparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { requestDirector } from '../director/client';
+import type { ProviderKind } from '../engine/types';
+import type { DirectorMessage, DirectorProposal } from '../state/types';
+import { Button, Panel } from './components';
+
+type DirectorPanelProps = {
+  dsl: string;
+  provider: ProviderKind;
+  onProviderChange: (provider: ProviderKind) => void;
+  onCommit: (proposal: DirectorProposal) => void;
+  onPreview: (proposal: DirectorProposal) => void;
+};
+
+const SUGGESTIONS = ['add glitch burst', 'slow it down', 'loop it', 'make 1-bit'];
+
+type ProviderStatus = {
+  provider: ProviderKind;
+  anthropic: boolean;
+  openai: boolean;
+  models: {
+    anthropic: string;
+    openai: string;
+  };
+};
+
+export function DirectorPanel({ dsl, provider, onProviderChange, onCommit, onPreview }: DirectorPanelProps) {
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<DirectorMessage[]>([
+    {
+      id: 'welcome',
+      role: 'director',
+      text: 'Describe the motion. I will draft .me notation you can preview, commit, or rewrite.',
+      at: formatClock(),
+    },
+  ]);
+  const [proposal, setProposal] = useState<DirectorProposal | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ProviderStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/providers')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((nextStatus: ProviderStatus | null) => {
+        if (!cancelled) setStatus(nextStatus);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function runPrompt(prompt: string) {
+    const text = prompt.trim();
+    if (!text || pending) return;
+
+    const userMessage: DirectorMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      text,
+      at: formatClock(),
+    };
+
+    setMessages((current) => [...current, userMessage]);
+    setInput('');
+    setPending(true);
+    setError(null);
+
+    try {
+      const nextProposal = await requestDirector({
+        prompt: text,
+        currentDsl: dsl,
+        provider,
+        history: [...messages, userMessage],
+      });
+      setProposal(nextProposal);
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'director',
+          text: nextProposal.mock
+            ? `Drafted with ${nextProposal.model}. Add an API key when you want a live model.`
+            : `Drafted with ${nextProposal.model}. Preview it before committing if you want to compare.`,
+          at: formatClock(),
+        },
+      ]);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Director request failed.';
+      setError(message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="DIRECTOR"
+      tone="cyan"
+      flags={provider}
+      flush
+      className="director-panel"
+      tools={
+        <select className="provider-select" value={provider} onChange={(event) => onProviderChange(event.target.value as ProviderKind)}>
+          <option value="anthropic">anthropic</option>
+          <option value="openai">openai</option>
+          <option value="mock">mock</option>
+        </select>
+      }
+      footer="Ctrl+Enter run - preview does not commit"
+    >
+      <div className="director-log">
+        <div className="provider-status">
+          <span data-ready={Boolean(status?.anthropic)}>anthropic {status?.models.anthropic ?? 'claude-sonnet-4'}</span>
+          <span data-ready={Boolean(status?.openai)}>openai {status?.models.openai ?? 'gpt-5.2'}</span>
+          <span data-ready={provider === 'mock'}>fallback mock</span>
+        </div>
+        {messages.map((message) => (
+          <div key={message.id} className={`chat-turn chat-turn--${message.role}`}>
+            <div className="chat-turn__meta">
+              {message.role === 'director' ? 'director' : 'you'} - {message.at}
+            </div>
+            <div className="chat-turn__text">{message.text}</div>
+          </div>
+        ))}
+        {pending && (
+          <div className="director-thinking">
+            <span />
+            drafting
+          </div>
+        )}
+        {error && <div className="director-error">{error}</div>}
+        {proposal && (
+          <div className="proposal-card">
+            <div className="proposal-card__meta">
+              <Bot size={13} /> proposed - {proposal.provider} / {proposal.model}
+            </div>
+            <pre>{proposal.dsl}</pre>
+            {proposal.notes && <small>{proposal.notes}</small>}
+            <div className="proposal-card__actions">
+              <Button tone="prim" icon={<Check size={13} />} onClick={() => onCommit(proposal)}>
+                commit
+              </Button>
+              <Button icon={<RefreshCw size={13} />} onClick={() => runPrompt(`Rewrite this more cleanly:\n${proposal.dsl}`)}>
+                rewrite
+              </Button>
+              <Button icon={<Eye size={13} />} onClick={() => onPreview(proposal)}>
+                preview only
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <form
+        className="director-input"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void runPrompt(input);
+        }}
+      >
+        <div className="director-input__box">
+          <WandSparkles size={14} />
+          <textarea
+            value={input}
+            placeholder="describe a motion..."
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                void runPrompt(input);
+              }
+            }}
+          />
+          <Button type="submit" tone="prim" icon={<Send size={13} />} disabled={pending}>
+            run
+          </Button>
+        </div>
+        <div className="suggestions">
+          {SUGGESTIONS.map((suggestion) => (
+            <button type="button" key={suggestion} onClick={() => void runPrompt(suggestion)}>
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+function formatClock() {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date());
+}

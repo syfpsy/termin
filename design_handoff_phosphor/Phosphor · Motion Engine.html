@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Phosphor · Terminal Motion Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500;600;700&family=Fira+Code:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #0A0C09; color: #CDDDA0; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  * { box-sizing: border-box; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="motion-engine/design-canvas.jsx"></script>
+<script type="text/babel" src="motion-engine/me-core.jsx"></script>
+<script type="text/babel" src="motion-engine/me-preview.jsx"></script>
+<script type="text/babel" src="motion-engine/me-timeline.jsx"></script>
+<script type="text/babel" src="motion-engine/me-hero-v1.jsx"></script>
+<script type="text/babel" src="motion-engine/me-hero-v2.jsx"></script>
+<script type="text/babel" src="motion-engine/me-surfaces.jsx"></script>
+
+<div id="root"></div>
+
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+function Intro() {
+  const T = window.ME_T;
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: T.bg, color: T.ink, padding: '28px 32px',
+      display: 'flex', flexDirection: 'column', gap: 18,
+      fontFamily: "'JetBrains Mono', monospace",
+    }}>
+      <div>
+        <div style={{ fontSize: 10.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.inkMuted }}>design handoff · phosphor v0.1</div>
+        <div style={{ fontFamily: "'VT323', monospace", fontSize: 56, lineHeight: 0.95, color: T.ink, textShadow: T.glow, marginTop: 8 }}>
+          a motion engine<br/>for terminals.
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, color: T.inkDim, lineHeight: 1.6, maxWidth: 620 }}>
+        <span style={{ color: T.ink }}>phosphor</span> is a standalone product — a motion-design tool where the primitives are character cells, the clock ticks at 30 Hz, and motion blur is real phosphor decay. authoring is <span style={{ color: T.ink2 }}>vibe-coded</span>: describe a scene in prose, the director drafts notation, you edit live.
+      </div>
+      <div style={{ border: `1px dashed ${T.bezelHi}`, padding: '14px 16px' }}>
+        <div style={{ fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.inkMuted, marginBottom: 8 }}>8 surfaces on this canvas</div>
+        <div style={{ fontSize: 11, color: T.inkDim, lineHeight: 1.8 }}>
+          ◆ <span style={{ color: T.ink }}>hero · v1 ai-native</span> — director-first. talk to the engine. notation is a receipt.<br/>
+          ◆ <span style={{ color: T.ink }}>hero · v2 notation-native</span> — DSL-first. director is a peek drawer.<br/>
+          ◆ <span style={{ color: T.ink }}>scene library</span> — 99 scenes across 6 shelves, browse/fork<br/>
+          ◆ <span style={{ color: T.ink }}>effect palette</span> — primitive detail view with live param demos<br/>
+          ◆ <span style={{ color: T.ink }}>asset manager</span> — fonts, palettes, ascii kits, scan patterns<br/>
+          ◆ <span style={{ color: T.ink }}>export + render queue</span> — 8 targets, live job list<br/>
+          ◆ <span style={{ color: T.ink }}>onboarding</span> — first signal / setup<br/>
+          ◆ <span style={{ color: T.ink }}>settings</span> — chrome, phosphor knobs, typography<br/>
+          ◆ <span style={{ color: T.ink }}>empty / new scene</span> — start with director or pick a template
+        </div>
+      </div>
+      <div style={{ marginTop: 'auto', fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.inkMuted }}>
+        vocabulary: phosphor (tokens) · director (the AI) · notation (the .me DSL) · stage (preview) · decay (motion blur) · tick (1/30s)
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="intro" title="Phosphor" subtitle="terminal motion engine · broadcast-adjacent · motion-designer-first">
+        <DCArtboard id="intro" label="Read me" width={640} height={560}>
+          <Intro />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="hero" title="Hero · Authoring (2 variations)" subtitle="same preview-dominant skeleton · different primary authoring surface">
+        <DCArtboard id="hero-v1" label="V1 · AI-native (director primary)" width={1440} height={900}>
+          <window.MeHeroV1 />
+        </DCArtboard>
+        <DCArtboard id="hero-v2" label="V2 · Notation-native (DSL primary, director peek)" width={1440} height={900}>
+          <window.MeHeroV2 />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="library" title="Scene Library" subtitle="99 scenes · 6 shelves · browse, fork, preview">
+        <DCArtboard id="library" label="Library · gallery" width={1440} height={900}>
+          <window.MeLibrary />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="effects" title="Effect Palette · detail" subtitle="one primitive (glitch) shown with param controls + live demos + notation">
+        <DCArtboard id="effects" label="Effects · glitch" width={1440} height={860}>
+          <window.MeEffectDetail />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="assets" title="Asset Manager" subtitle="fonts · palettes · ascii kits · used across every scene">
+        <DCArtboard id="assets" label="Assets · fonts + palettes" width={1440} height={900}>
+          <window.MeAssets />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="export" title="Export + Render Queue" subtitle="8 targets · per-target options · live job list with progress">
+        <DCArtboard id="export" label="Export · MP4 + queue" width={1440} height={900}>
+          <window.MeExport />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="onboarding" title="Onboarding · first signal" subtitle="3 promises · 3-step setup · live preview running">
+        <DCArtboard id="onboarding" label="Onboarding" width={1440} height={820}>
+          <window.MeOnboarding />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="settings" title="Settings · Appearance" subtitle="chrome toggle · phosphor knobs · typography picker. applies live.">
+        <DCArtboard id="settings" label="Settings · appearance" width={1440} height={900}>
+          <window.MeSettings />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="empty" title="Empty · New Scene" subtitle="director-first start + notation + fork-from-library + recent">
+        <DCArtboard id="empty" label="Empty / new" width={1440} height={820}>
+          <window.MeEmpty />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>
