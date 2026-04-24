@@ -6,6 +6,7 @@ export type CanvasRenderOptions = {
   width: number;
   height: number;
   background?: string;
+  pixelRatio?: number;
 };
 
 const FONT_STACKS: Record<PhosphorFont, string> = {
@@ -23,7 +24,7 @@ export function renderBufferToCanvas(
   appearance: Appearance,
   options: CanvasRenderOptions,
 ) {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = options.pixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
   const pixelWidth = Math.max(1, Math.floor(options.width * dpr));
   const pixelHeight = Math.max(1, Math.floor(options.height * dpr));
 

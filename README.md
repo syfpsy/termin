@@ -7,11 +7,12 @@ Phosphor is a terminal-native motion design tool for motion designers and termin
 - React + Vite + TypeScript desktop workspace.
 - Framework-agnostic engine under `src/engine`.
 - Strict engine layers: `Grid`, `PhosphorBuffer`, fixed `TickClock`, DSL parser/evaluator, Canvas renderer, WebGL post-pass renderer.
-- Director API with Anthropic, OpenAI, and mock fallback.
+- Director API with Anthropic, OpenRouter, DeepSeek, OpenAI, and mock fallback.
 - Local-first scene/settings persistence.
-- `.me` import/export and self-contained HTML export.
+- Browser-local Admin panel for user-supplied model keys and model defaults.
+- `.me` import/export, versioned `.phosphor.json` bundles, self-contained HTML export, and a standalone `phosphor-player.js` web component.
 - 99-scene library across boot, loading, transitions, alerts, reveals, and backdrops, with engine-rendered thumbnails and fork workflow.
-- Addressable product surfaces: `#start`, `#library`, `#effects`, `#assets`, `#export`, `#settings`, `#empty`.
+- Addressable product surfaces: `#start`, `#library`, `#effects`, `#assets`, `#export`, `#admin`, `#settings`, `#empty`.
 - Export queue scaffold for future MP4/GIF/SVG/PNG/WebM workers.
 - Recent-scene persistence in localStorage plus an IndexedDB scene store for the future local-first library.
 
@@ -33,11 +34,14 @@ Useful views:
 - `http://127.0.0.1:5173/#effects` - primitive detail
 - `http://127.0.0.1:5173/#assets` - asset manager
 - `http://127.0.0.1:5173/#export` - export targets and queue
+- `http://127.0.0.1:5173/#admin` - model provider keys and defaults
 - `http://127.0.0.1:5173/#settings` - appearance and runtime settings
 
 ## AI Director Keys
 
-Copy `.env.example` to `.env`.
+Use the Admin panel when you want users to bring their own keys. Keys entered there are stored only in that browser's local storage, sent with director requests, and not included in `.me` exports.
+
+Server-side defaults are also supported for local development or hosted deployments. Copy `.env.example` to `.env` and choose a provider:
 
 ```bash
 PHOSPHOR_AI_PROVIDER=anthropic
@@ -45,7 +49,19 @@ ANTHROPIC_API_KEY=...
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ```
 
-OpenAI is also supported:
+OpenRouter, DeepSeek, and OpenAI are also supported:
+
+```bash
+PHOSPHOR_AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=openrouter/auto
+```
+
+```bash
+PHOSPHOR_AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-chat
+```
 
 ```bash
 PHOSPHOR_AI_PROVIDER=openai
@@ -53,13 +69,47 @@ OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.2
 ```
 
-If no key is present, the app uses the local mock director so the authoring flow still works.
+If no browser key or server key is present, the app uses the local mock director so the authoring flow still works.
+
+## Export Contract
+
+Use `.phosphor.json` for anything you want to run reliably on the web or devices. It is versioned as `schema: "phosphor.bundle.v1"` and uses the MIME type `application/vnd.phosphor.bundle+json`.
+
+The bundle includes:
+
+- `scene.source`: editable `.me` notation.
+- `scene.events`: compiled JSON events with `atMs`, `durationMs`, `effect`, `target`, `modifiers`, and `tone` for device runtimes.
+- `scene.grid`: fixed 96 x 36 cell geometry for v1.
+- `scene.tickRate` and `scene.loop`: deterministic playback timing.
+- `appearance`: renderer settings, clamped by the validator.
+- `assets`: font and palette manifest.
+
+Web usage after `npm run build`; `dist/phosphor-player.js` is emitted as a single-file, non-React player:
+
+```html
+<script type="module" src="/phosphor-player.js"></script>
+<phosphor-player src="/boot_sequence_v3.phosphor.json"></phosphor-player>
+```
+
+Inline usage:
+
+```html
+<script type="module" src="/phosphor-player.js"></script>
+<phosphor-player>
+  <script type="application/vnd.phosphor.bundle+json">
+    { "schema": "phosphor.bundle.v1", "schemaVersion": 1, "...": "..." }
+  </script>
+</phosphor-player>
+```
+
+HTML export remains useful for quick sharing because it embeds a bundle and a tiny canvas runtime in one file. Treat `.phosphor.json` as the durable interchange format and HTML as a convenience wrapper.
 
 ## Verification
 
 ```bash
 npm run typecheck
 npm run test:engine
+npm run test:export
 npm run build
 ```
 

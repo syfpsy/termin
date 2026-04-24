@@ -1,6 +1,14 @@
 import { Code2, Download, FileUp, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { exportBundleJson, exportHtmlEmbed, exportMeFile, readMeFile } from '../director/client';
+import {
+  exportBundleJson,
+  exportHtmlEmbed,
+  exportMeFile,
+  exportPngSequence,
+  exportWebm,
+  isWebmExportSupported,
+  readSceneFile,
+} from '../director/client';
 import { TickClock } from '../engine/clock';
 import { parseScene } from '../engine/dsl';
 import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, TickRate } from '../engine/types';
@@ -8,14 +16,17 @@ import { DEFAULT_APPEARANCE } from '../engine/types';
 import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import type { LibraryScene } from '../scenes/library';
 import { saveSceneRecord } from '../state/sceneDb';
+import type { ModelProviderConfig } from '../state/modelProviders';
 import type { DirectorProposal } from '../state/types';
 import {
   loadAppearance,
   loadDsl,
+  loadModelProviders,
   loadProvider,
   loadRenderer,
   saveAppearance,
   saveDsl,
+  saveModelProviders,
   saveProvider,
   saveRenderer,
   loadRecentScenes,
@@ -28,6 +39,7 @@ import { EnginePreview } from './EnginePreview';
 import { NotationPanel } from './NotationPanel';
 import { SceneLibrary } from './SceneLibrary';
 import {
+  AdminSurface,
   AssetsSurface,
   EffectDetailSurface,
   EmptySurface,
@@ -40,7 +52,7 @@ import {
 } from './Surfaces';
 import { Timeline } from './Timeline';
 
-type AppView = 'author' | 'start' | 'library' | 'effects' | 'assets' | 'export' | 'settings' | 'empty';
+type AppView = 'author' | 'start' | 'library' | 'effects' | 'assets' | 'export' | 'admin' | 'settings' | 'empty';
 
 const NAV_ITEMS: Array<{ view: AppView; label: string }> = [
   { view: 'author', label: 'author' },
@@ -49,6 +61,7 @@ const NAV_ITEMS: Array<{ view: AppView; label: string }> = [
   { view: 'effects', label: 'effects' },
   { view: 'assets', label: 'assets' },
   { view: 'export', label: 'export' },
+  { view: 'admin', label: 'admin' },
   { view: 'settings', label: 'settings' },
   { view: 'empty', label: 'new' },
 ];
@@ -75,9 +88,11 @@ export function App() {
   const [appearance, setAppearance] = useState<Appearance>(() => ({ ...DEFAULT_APPEARANCE, ...loadAppearance() }));
   const [renderer, setRenderer] = useState<RendererKind>(loadRenderer);
   const [provider, setProvider] = useState<ProviderKind>(loadProvider);
+  const [modelProviders, setModelProviders] = useState<Record<ProviderKind, ModelProviderConfig>>(loadModelProviders);
   const [jobs, setJobs] = useState<ExportJob[]>([]);
   const [recents, setRecents] = useState<RecentScene[]>(loadRecentScenes);
   const [playing, setPlaying] = useState(true);
+  const [importError, setImportError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const activeDsl = previewDsl ?? dsl;
   const scene = useMemo(() => parseScene(activeDsl), [activeDsl]);
@@ -94,6 +109,7 @@ export function App() {
   useEffect(() => saveAppearance(appearance), [appearance]);
   useEffect(() => saveRenderer(renderer), [renderer]);
   useEffect(() => saveProvider(provider), [provider]);
+  useEffect(() => saveModelProviders(modelProviders), [modelProviders]);
 
   useEffect(() => {
     setTick(0);
@@ -145,18 +161,94 @@ export function App() {
   function createJob(target: ExportTarget) {
     const config = EXPORT_TARGETS.find((item) => item.target === target);
     const ready = config?.status === 'ready';
-    setJobs((current) => [createExportJob(target, config?.label ?? target, Boolean(ready)), ...current]);
-    if (target === 'html') exportHtmlEmbed(scene.name, dsl, appearance);
-    if (target === 'me') exportMeFile(scene.name, dsl);
-    if (target === 'bundle-json') exportBundleJson(scene.name, dsl, appearance);
+    const job = createExportJob(target, config?.label ?? target, Boolean(ready));
+    setJobs((current) => [job, ...current]);
+
+    if (!ready) return;
+
+    if (target === 'html') {
+      exportHtmlEmbed(scene.name, dsl, appearance);
+      markJobDone(job.id, 'HTML exported with inline phosphor-player.');
+      return;
+    }
+    if (target === 'me') {
+      exportMeFile(scene.name, dsl);
+      markJobDone(job.id, 'Plain .me source exported.');
+      return;
+    }
+    if (target === 'bundle-json') {
+      exportBundleJson(scene.name, dsl, appearance);
+      markJobDone(job.id, 'Phosphor bundle exported.');
+      return;
+    }
+    if (target === 'png-seq') {
+      void runAsyncExport(job.id, 'Rendering PNG sequence...', () =>
+        exportPngSequence(scene.name, dsl, appearance, {
+          onProgress: (ratio) => updateJobProgress(job.id, ratio),
+        }),
+      );
+      return;
+    }
+    if (target === 'webm') {
+      if (!isWebmExportSupported()) {
+        markJobBlocked(job.id, 'This browser cannot record WebM. Try Chrome or Firefox.');
+        return;
+      }
+      void runAsyncExport(job.id, 'Recording WebM at scene tick rate...', () =>
+        exportWebm(scene.name, dsl, appearance, {
+          onProgress: (ratio) => updateJobProgress(job.id, ratio),
+        }),
+      );
+      return;
+    }
+  }
+
+  function setJob(id: string, patch: Partial<ExportJob>) {
+    setJobs((current) => current.map((job) => (job.id === id ? { ...job, ...patch } : job)));
+  }
+
+  function markJobDone(id: string, note: string) {
+    setJob(id, { status: 'done', progress: 1, note });
+  }
+
+  function markJobBlocked(id: string, note: string) {
+    setJob(id, { status: 'blocked', progress: 0, note });
+  }
+
+  function updateJobProgress(id: string, ratio: number) {
+    setJob(id, { status: 'running', progress: Math.max(0, Math.min(1, ratio)) });
+  }
+
+  async function runAsyncExport(id: string, startNote: string, exec: () => Promise<void>) {
+    setJob(id, { status: 'running', progress: 0, note: startNote });
+    try {
+      await exec();
+      markJobDone(id, 'Render complete. File downloaded.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Render failed.';
+      markJobBlocked(id, message);
+    }
+  }
+
+  function updateModelProvider(config: ModelProviderConfig) {
+    setModelProviders((current) => ({
+      ...current,
+      [config.provider]: config,
+    }));
   }
 
   async function importScene(file: File | undefined) {
     if (!file) return;
-    const nextDsl = await readMeFile(file);
-    setDsl(nextDsl);
-    setPreviewDsl(null);
-    setTick(0);
+    try {
+      const imported = await readSceneFile(file);
+      setDsl(imported.dsl);
+      if (imported.appearance) setAppearance(imported.appearance);
+      setPreviewDsl(null);
+      setImportError(null);
+      setTick(0);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Import failed.');
+    }
   }
 
   function openRecent(recent: RecentScene) {
@@ -182,6 +274,7 @@ export function App() {
         </nav>
         <span className="titlebar__scene">{scene.name}</span>
         {previewDsl && <span className="preview-badge">previewing proposal</span>}
+        {importError && <span className="import-error">{importError}</span>}
         <div className="titlebar__spacer" />
         <Label>mode</Label>
         <strong>AI / vibe</strong>
@@ -189,12 +282,15 @@ export function App() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".me,text/plain"
+          accept=".me,.json,application/json,application/vnd.phosphor.bundle+json,text/plain"
           className="visually-hidden"
-          onChange={(event) => void importScene(event.currentTarget.files?.[0])}
+          onChange={(event) => {
+            void importScene(event.currentTarget.files?.[0]);
+            event.currentTarget.value = '';
+          }}
         />
         <Button icon={<FileUp size={13} />} onClick={() => fileInputRef.current?.click()}>
-          import .me
+          import
         </Button>
         <Button icon={<Download size={13} />} tone="prim" onClick={() => exportMeFile(scene.name, dsl)}>
           export .me
@@ -207,7 +303,15 @@ export function App() {
       {view === 'author' ? (
         <>
           <aside className="left-stack">
-            <DirectorPanel dsl={dsl} provider={provider} onProviderChange={setProvider} onCommit={commitProposal} onPreview={previewProposal} />
+            <DirectorPanel
+              dsl={dsl}
+              provider={provider}
+              providerConfig={modelProviders[provider]}
+              providerConfigs={modelProviders}
+              onProviderChange={setProvider}
+              onCommit={commitProposal}
+              onPreview={previewProposal}
+            />
             <NotationPanel
               dsl={dsl}
               scene={parseScene(dsl)}
@@ -347,6 +451,14 @@ export function App() {
           {view === 'library' && <LibrarySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
           {view === 'effects' && <EffectDetailSurface dsl={dsl} onDslChange={setDsl} />}
           {view === 'assets' && <AssetsSurface appearance={appearance} onAppearanceChange={updateAppearance} />}
+          {view === 'admin' && (
+            <AdminSurface
+              provider={provider}
+              providerConfigs={modelProviders}
+              onProviderChange={setProvider}
+              onProviderConfigChange={updateModelProvider}
+            />
+          )}
           {view === 'export' && (
             <ExportSurface
               dsl={dsl}
@@ -354,6 +466,7 @@ export function App() {
               appearance={appearance}
               renderer={renderer}
               provider={provider}
+              providerConfigs={modelProviders}
               jobs={jobs}
               onForkScene={forkLibraryScene}
               onDslChange={setDsl}
@@ -371,6 +484,7 @@ export function App() {
               appearance={appearance}
               renderer={renderer}
               provider={provider}
+              providerConfigs={modelProviders}
               jobs={jobs}
               onForkScene={forkLibraryScene}
               onDslChange={setDsl}

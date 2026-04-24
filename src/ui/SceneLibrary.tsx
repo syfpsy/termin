@@ -1,6 +1,6 @@
 import { GitFork, Library } from 'lucide-react';
 import { SCENE_LIBRARY, type LibraryScene } from '../scenes/library';
-import { Button, Panel } from './components';
+import { Panel } from './components';
 
 type SceneLibraryProps = {
   onFork: (scene: LibraryScene) => void;
@@ -23,9 +23,12 @@ export function SceneLibrary({ onFork }: SceneLibraryProps) {
               <strong>{scene.name}</strong>
               <small>{scene.shelf} - {scene.description}</small>
             </span>
-            <Button type="button" icon={<GitFork size={12} />}>
-              fork
-            </Button>
+            <span className="button button--default library-card__action">
+              <span className="button__icon">
+                <GitFork size={12} />
+              </span>
+              <span>fork</span>
+            </span>
           </button>
         ))}
       </div>

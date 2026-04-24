@@ -2,12 +2,15 @@ import { Bot, Check, Eye, RefreshCw, Send, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { requestDirector } from '../director/client';
 import type { ProviderKind } from '../engine/types';
+import { DEFAULT_MODEL_PROVIDERS, providerHasUserKey, PROVIDER_ORDER, type ModelProviderConfig } from '../state/modelProviders';
 import type { DirectorMessage, DirectorProposal } from '../state/types';
 import { Button, Panel } from './components';
 
 type DirectorPanelProps = {
   dsl: string;
   provider: ProviderKind;
+  providerConfig: ModelProviderConfig;
+  providerConfigs: Record<ProviderKind, ModelProviderConfig>;
   onProviderChange: (provider: ProviderKind) => void;
   onCommit: (proposal: DirectorProposal) => void;
   onPreview: (proposal: DirectorProposal) => void;
@@ -18,14 +21,20 @@ const SUGGESTIONS = ['add glitch burst', 'slow it down', 'loop it', 'make 1-bit'
 type ProviderStatus = {
   provider: ProviderKind;
   anthropic: boolean;
+  openrouter: boolean;
+  deepseek: boolean;
   openai: boolean;
   models: {
     anthropic: string;
+    openrouter: string;
+    deepseek: string;
     openai: string;
   };
 };
 
-export function DirectorPanel({ dsl, provider, onProviderChange, onCommit, onPreview }: DirectorPanelProps) {
+export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, onProviderChange, onCommit, onPreview }: DirectorPanelProps) {
+  const configs = providerConfigs ?? DEFAULT_MODEL_PROVIDERS;
+  const activeConfig = providerConfig ?? configs[provider] ?? DEFAULT_MODEL_PROVIDERS[provider];
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<DirectorMessage[]>([
     {
@@ -76,6 +85,11 @@ export function DirectorPanel({ dsl, provider, onProviderChange, onCommit, onPre
         prompt: text,
         currentDsl: dsl,
         provider,
+        providerConfig: {
+          apiKey: activeConfig.apiKey,
+          model: activeConfig.model,
+          baseUrl: activeConfig.baseUrl,
+        },
         history: [...messages, userMessage],
       });
       setProposal(nextProposal);
@@ -107,17 +121,21 @@ export function DirectorPanel({ dsl, provider, onProviderChange, onCommit, onPre
       className="director-panel"
       tools={
         <select className="provider-select" value={provider} onChange={(event) => onProviderChange(event.target.value as ProviderKind)}>
-          <option value="anthropic">anthropic</option>
-          <option value="openai">openai</option>
-          <option value="mock">mock</option>
+          {PROVIDER_ORDER.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
         </select>
       }
       footer="Ctrl+Enter run - preview does not commit"
     >
       <div className="director-log">
         <div className="provider-status">
-          <span data-ready={Boolean(status?.anthropic)}>anthropic {status?.models.anthropic ?? 'claude-sonnet-4'}</span>
-          <span data-ready={Boolean(status?.openai)}>openai {status?.models.openai ?? 'gpt-5.2'}</span>
+          <span data-ready={providerHasUserKey(configs.anthropic) || Boolean(status?.anthropic)}>anthropic {configs.anthropic.model || status?.models.anthropic}</span>
+          <span data-ready={providerHasUserKey(configs.openrouter) || Boolean(status?.openrouter)}>openrouter {configs.openrouter.model || status?.models.openrouter}</span>
+          <span data-ready={providerHasUserKey(configs.deepseek) || Boolean(status?.deepseek)}>deepseek {configs.deepseek.model || status?.models.deepseek}</span>
+          <span data-ready={providerHasUserKey(configs.openai) || Boolean(status?.openai)}>openai {configs.openai.model || status?.models.openai}</span>
           <span data-ready={provider === 'mock'}>fallback mock</span>
         </div>
         {messages.map((message) => (

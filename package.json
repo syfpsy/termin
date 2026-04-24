@@ -7,8 +7,9 @@
     "dev": "concurrently -k -n api,web -c cyan,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite --host 127.0.0.1",
     "dev:api": "tsx watch server/director.ts",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --config vite.player.config.ts",
     "test:engine": "tsx scripts/engine-smoke.ts",
+    "test:export": "tsx scripts/export-smoke.ts",
     "typecheck": "tsc -b",
     "preview": "vite preview --host 127.0.0.1"
   },

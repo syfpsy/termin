@@ -2,6 +2,7 @@ node_modules/
 dist/
 .vercel/
 .agents/
+.claude/
 .env
 .env.*
 !.env.example

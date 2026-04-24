@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phosphor.dev/schemas/phosphor.bundle.v1.json",
+  "title": "Phosphor Bundle v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema", "schemaVersion", "runtime", "scene", "appearance"],
+  "properties": {
+    "schema": { "const": "phosphor.bundle.v1" },
+    "schemaVersion": { "const": 1 },
+    "createdAt": { "type": "string" },
+    "runtime": {
+      "type": "object",
+      "required": ["engine", "engineVersion", "minPlayerVersion"],
+      "properties": {
+        "engine": { "const": "phosphor" },
+        "engineVersion": { "type": "string" },
+        "minPlayerVersion": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "required": ["name", "source", "durationMs", "grid", "tickRate", "loop", "events"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "durationMs": { "type": "number", "minimum": 1 },
+        "tickRate": { "enum": [24, 30, 60] },
+        "grid": {
+          "type": "object",
+          "required": ["cols", "rows"],
+          "properties": {
+            "cols": { "type": "integer", "minimum": 1 },
+            "rows": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "loop": {
+          "type": "object",
+          "required": ["startMs", "endMs"],
+          "properties": {
+            "startMs": { "type": "number", "minimum": 0 },
+            "endMs": { "type": "number", "minimum": 1 }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "atMs", "durationMs", "effect", "target", "modifiers", "tone", "raw"],
+            "properties": {
+              "line": { "type": "integer", "minimum": 1 },
+              "atMs": { "type": "number", "minimum": 0 },
+              "durationMs": { "type": "number", "minimum": 0 },
+              "effect": { "type": "string", "minLength": 1 },
+              "target": { "type": "string" },
+              "modifiers": { "type": "string" },
+              "tone": { "type": "string" },
+              "raw": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "appearance": {
+      "type": "object",
+      "required": ["chrome", "decay", "bloom", "scanlines", "curvature", "flicker", "chromatic", "font", "sizeScale", "mode", "tickRate"],
+      "properties": {
+        "chrome": { "enum": ["bezel", "flat", "none"] },
+        "decay": { "type": "number", "minimum": 0, "maximum": 5000 },
+        "bloom": { "type": "number", "minimum": 0, "maximum": 8 },
+        "scanlines": { "type": "number", "minimum": 0, "maximum": 1 },
+        "curvature": { "type": "number", "minimum": 0, "maximum": 1 },
+        "flicker": { "type": "number", "minimum": 0, "maximum": 1 },
+        "chromatic": { "type": "number", "minimum": 0, "maximum": 2 },
+        "font": { "enum": ["vt323", "plex", "jet", "atkinson", "fira", "space"] },
+        "sizeScale": { "type": "number", "minimum": 0.5, "maximum": 2 },
+        "mode": { "enum": ["color", "1-bit"] },
+        "tickRate": { "enum": [24, 30, 60] }
+      },
+      "additionalProperties": true
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

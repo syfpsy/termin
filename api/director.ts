@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { completeDsl, selectedProvider, type DirectorRequest } from '../server/directorCore.js';
+import { completeDsl, isProvider, selectedProvider, type DirectorRequest } from '../server/directorCore.js';
 
 type VercelRequest = IncomingMessage & {
   body?: unknown;
@@ -14,7 +14,7 @@ export default async function handler(request: VercelRequest, response: ServerRe
 
   try {
     const body = (await readBody(request)) as DirectorRequest;
-    const provider = body.provider && body.provider !== 'mock' ? body.provider : selectedProvider();
+    const provider = isProvider(body.provider) ? body.provider : selectedProvider();
     sendJson(response, 200, await completeDsl(provider, body));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

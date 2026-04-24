@@ -17,7 +17,7 @@ export type PreviewChrome = 'bezel' | 'flat' | 'none';
 export type PreviewMode = 'color' | '1-bit';
 export type TickRate = 24 | 30 | 60;
 export type RendererKind = 'canvas' | 'webgl';
-export type ProviderKind = 'mock' | 'anthropic' | 'openai';
+export type ProviderKind = 'mock' | 'anthropic' | 'openrouter' | 'deepseek' | 'openai';
 
 export type Appearance = {
   chrome: PreviewChrome;

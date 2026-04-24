@@ -1,19 +1,23 @@
 import {
   ArrowRight,
-  Check,
   Code2,
   Download,
   FileJson,
   GitFork,
-  Settings,
   SlidersHorizontal,
 } from 'lucide-react';
 import { exportBundleJson, exportHtmlEmbed, exportMeFile } from '../director/client';
 import { estimateEventDuration, eventTone } from '../engine/dsl';
 import type { Appearance, ParsedScene, ProviderKind, RendererKind, TickRate } from '../engine/types';
 import { ASSET_CATALOG } from '../assets/catalog';
-import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
+import { EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import { SCENE_LIBRARY, type LibraryScene } from '../scenes/library';
+import {
+  DEFAULT_MODEL_PROVIDERS,
+  providerHasUserKey,
+  PROVIDER_ORDER,
+  type ModelProviderConfig,
+} from '../state/modelProviders';
 import type { RecentScene } from '../state/storage';
 import { Button, Label, Panel, Phos, Segmented, SliderRow } from './components';
 import { MiniPreview } from './MiniPreview';
@@ -24,12 +28,14 @@ type SharedSurfaceProps = {
   appearance: Appearance;
   renderer: RendererKind;
   provider: ProviderKind;
+  providerConfigs: Record<ProviderKind, ModelProviderConfig>;
   jobs: ExportJob[];
   onForkScene: (scene: LibraryScene) => void;
   onDslChange: (dsl: string) => void;
   onAppearanceChange: (patch: Partial<Appearance>) => void;
   onRendererChange: (renderer: RendererKind) => void;
   onProviderChange: (provider: ProviderKind) => void;
+  onProviderConfigChange?: (config: ModelProviderConfig) => void;
   onCreateJob: (target: ExportTarget) => void;
   onOpenAuthor: () => void;
 };
@@ -206,7 +212,7 @@ export function ExportSurface({ dsl, scene, appearance, jobs, onCreateJob }: Sha
                 .me source
               </Button>
               <Button icon={<FileJson size={13} />} tone="prim" onClick={() => exportBundleJson(scene.name, dsl, appearance)}>
-                bundle json
+                phosphor json
               </Button>
             </Panel>
             <Panel title="QUEUE" flags={`${jobs.length} jobs`} dense flush>
@@ -284,6 +290,8 @@ export function SettingsSurface({
               onChange={onProviderChange}
               options={[
                 { value: 'anthropic', label: 'anthropic' },
+                { value: 'openrouter', label: 'openrouter' },
+                { value: 'deepseek', label: 'deepseek' },
                 { value: 'openai', label: 'openai' },
                 { value: 'mock', label: 'mock' },
               ]}
@@ -342,6 +350,94 @@ export function EmptySurface({ onForkScene, onOpenAuthor }: Pick<SharedSurfacePr
             </Button>
             <Button onClick={() => onForkScene(SCENE_LIBRARY[0])}>fork boot</Button>
             <Button onClick={() => onForkScene(SCENE_LIBRARY[1])}>fork loop</Button>
+          </div>
+        </div>
+      </Panel>
+    </section>
+  );
+}
+
+export function AdminSurface({
+  provider,
+  providerConfigs,
+  onProviderChange,
+  onProviderConfigChange,
+}: {
+  provider: ProviderKind;
+  providerConfigs: Record<ProviderKind, ModelProviderConfig>;
+  onProviderChange: (provider: ProviderKind) => void;
+  onProviderConfigChange: (config: ModelProviderConfig) => void;
+}) {
+  return (
+    <section className="surface admin-surface">
+      <Panel title="ADMIN / MODEL KEYS" flags="stored in this browser only" flush>
+        <div className="admin-layout">
+          <div className="admin-note">
+            <Phos size={34}>bring your own model</Phos>
+            <p>
+              Keys are saved locally in this browser and sent only with director requests. They are not committed, not stored in the Vercel
+              project, and not included in exports.
+            </p>
+          </div>
+          <div className="provider-admin-grid">
+            {PROVIDER_ORDER.map((providerKey) => {
+              const config = providerConfigs[providerKey];
+              const defaults = DEFAULT_MODEL_PROVIDERS[providerKey];
+              const isMock = providerKey === 'mock';
+              const hasBaseUrl = defaults.baseUrl !== undefined;
+              const readiness = isMock ? 'local' : providerHasUserKey(config) ? 'ready' : 'needs key';
+              return (
+                <article key={providerKey} className="provider-admin-card" data-active={provider === providerKey}>
+                  <div className="provider-admin-card__head">
+                    <div>
+                      <Label>{readiness}</Label>
+                      <strong>{config.label}</strong>
+                    </div>
+                    <Button active={provider === providerKey} onClick={() => onProviderChange(providerKey)}>
+                      use
+                    </Button>
+                  </div>
+                  <label className="admin-field">
+                    <span>api key</span>
+                    <input
+                      type="password"
+                      value={config.apiKey}
+                      disabled={isMock}
+                      placeholder={isMock ? 'not required' : 'paste provider key'}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => onProviderConfigChange({ ...config, apiKey: event.target.value })}
+                    />
+                  </label>
+                  <label className="admin-field">
+                    <span>model</span>
+                    <input
+                      type="text"
+                      value={config.model}
+                      disabled={isMock}
+                      spellCheck={false}
+                      onChange={(event) => onProviderConfigChange({ ...config, model: event.target.value })}
+                    />
+                  </label>
+                  {hasBaseUrl && (
+                    <label className="admin-field">
+                      <span>base url</span>
+                      <input
+                        type="text"
+                        value={config.baseUrl ?? ''}
+                        spellCheck={false}
+                        onChange={(event) => onProviderConfigChange({ ...config, baseUrl: event.target.value })}
+                      />
+                    </label>
+                  )}
+                  <p>{config.note}</p>
+                  <div className="provider-admin-card__actions">
+                    <Button onClick={() => onProviderConfigChange({ ...defaults, apiKey: config.apiKey })}>reset</Button>
+                    <Button onClick={() => onProviderConfigChange({ ...config, apiKey: '' })}>clear key</Button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       </Panel>

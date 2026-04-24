@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { completeDsl, providerStatus, selectedProvider, type DirectorRequest } from './directorCore';
+import { completeDsl, isProvider, providerStatus, selectedProvider, type DirectorRequest } from './directorCore';
 
 const port = Number(process.env.PHOSPHOR_API_PORT || 8787);
 loadDotEnv();
@@ -23,7 +23,7 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && request.url === '/api/director') {
       const body = (await readJson(request)) as DirectorRequest;
-      const provider = body.provider && body.provider !== 'mock' ? body.provider : selectedProvider();
+      const provider = isProvider(body.provider) ? body.provider : selectedProvider();
       sendJson(response, 200, await completeDsl(provider, body));
       return;
     }

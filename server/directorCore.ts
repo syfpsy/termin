@@ -1,12 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-export type Provider = 'mock' | 'anthropic' | 'openai';
+export type Provider = 'mock' | 'anthropic' | 'openrouter' | 'deepseek' | 'openai';
 
 export type DirectorRequest = {
   prompt?: string;
   currentDsl?: string;
   provider?: Provider;
+  providerConfig?: {
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
   history?: Array<{ role: string; text: string }>;
 };
 
@@ -36,9 +41,13 @@ export function providerStatus() {
   return {
     provider: selectedProvider(),
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
     openai: Boolean(process.env.OPENAI_API_KEY),
     models: {
       anthropic: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      openrouter: process.env.OPENROUTER_MODEL || 'openrouter/auto',
+      deepseek: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
       openai: process.env.OPENAI_MODEL || 'gpt-5.2',
     },
   };
@@ -48,10 +57,12 @@ export async function completeDsl(provider: Provider, body: DirectorRequest) {
   const prompt = body.prompt?.trim() || 'Improve the current scene.';
   const currentDsl = body.currentDsl?.trim() || '';
   const userPrompt = buildUserPrompt(prompt, currentDsl);
+  const userKey = body.providerConfig?.apiKey?.trim();
+  const userModel = body.providerConfig?.model?.trim();
 
-  if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
-    const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  if (provider === 'anthropic' && (userKey || process.env.ANTHROPIC_API_KEY)) {
+    const model = userModel || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+    const client = new Anthropic({ apiKey: userKey || process.env.ANTHROPIC_API_KEY });
     const response = await client.messages.create({
       model,
       max_tokens: 1200,
@@ -69,21 +80,40 @@ export async function completeDsl(provider: Provider, body: DirectorRequest) {
     };
   }
 
-  if (provider === 'openai' && process.env.OPENAI_API_KEY) {
-    const model = process.env.OPENAI_MODEL || 'gpt-5.2';
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
+  if (provider === 'openrouter' && (userKey || process.env.OPENROUTER_API_KEY)) {
+    const model = userModel || process.env.OPENROUTER_MODEL || 'openrouter/auto';
+    return completeOpenAiCompatible({
+      provider,
       model,
-      instructions: SYSTEM_PROMPT,
-      input: userPrompt,
-      max_output_tokens: 1200,
+      userPrompt,
+      apiKey: userKey || process.env.OPENROUTER_API_KEY || '',
+      baseURL: body.providerConfig?.baseUrl || 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': 'https://termin-peach.vercel.app',
+        'X-Title': 'Phosphor',
+      },
     });
-    return {
-      dsl: response.output_text.trim(),
-      provider: 'openai',
+  }
+
+  if (provider === 'deepseek' && (userKey || process.env.DEEPSEEK_API_KEY)) {
+    const model = userModel || process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+    return completeOpenAiCompatible({
+      provider,
       model,
-      mock: false,
-    };
+      userPrompt,
+      apiKey: userKey || process.env.DEEPSEEK_API_KEY || '',
+      baseURL: body.providerConfig?.baseUrl || 'https://api.deepseek.com',
+    });
+  }
+
+  if (provider === 'openai' && (userKey || process.env.OPENAI_API_KEY)) {
+    const model = userModel || process.env.OPENAI_MODEL || 'gpt-5.2';
+    return completeOpenAiCompatible({
+      provider,
+      model,
+      userPrompt,
+      apiKey: userKey || process.env.OPENAI_API_KEY || '',
+    });
   }
 
   return {
@@ -97,10 +127,48 @@ export async function completeDsl(provider: Provider, body: DirectorRequest) {
 
 export function selectedProvider(): Provider {
   const provider = process.env.PHOSPHOR_AI_PROVIDER;
-  if (provider === 'anthropic' || provider === 'openai' || provider === 'mock') return provider;
+  if (isProvider(provider)) return provider;
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
+  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
   if (process.env.OPENAI_API_KEY) return 'openai';
   return 'mock';
+}
+
+export function isProvider(provider: unknown): provider is Provider {
+  return provider === 'anthropic' || provider === 'openrouter' || provider === 'deepseek' || provider === 'openai' || provider === 'mock';
+}
+
+async function completeOpenAiCompatible({
+  provider,
+  model,
+  userPrompt,
+  apiKey,
+  baseURL,
+  defaultHeaders,
+}: {
+  provider: Provider;
+  model: string;
+  userPrompt: string;
+  apiKey: string;
+  baseURL?: string;
+  defaultHeaders?: Record<string, string>;
+}) {
+  const client = new OpenAI({ apiKey, baseURL, defaultHeaders });
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: 1200,
+  });
+  return {
+    dsl: response.choices[0]?.message?.content?.trim() || mockDirector(userPrompt, ''),
+    provider,
+    model,
+    mock: false,
+  };
 }
 
 function buildUserPrompt(prompt: string, currentDsl: string) {
