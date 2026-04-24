@@ -18,13 +18,23 @@ import { TickClock } from '../engine/clock';
 import { parseScene } from '../engine/dsl';
 import {
   addEventToSource,
+  addMarkerToSource,
   defaultEventTemplate,
   deleteEventInSource,
+  deleteEventsInSource,
+  deleteMarkerInSource,
+  eventsToFragment,
   moveEventInSource,
+  moveEventsInSource,
+  pasteEventLines,
   patchEventInSource,
+  rescaleEventsInSource,
   resizeEventInSource,
+  setEventFlagInSource,
+  splitEventAtMs,
+  type FlagName,
 } from '../engine/dslEdit';
-import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, SceneEvent, TickRate } from '../engine/types';
+import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, SceneEvent, SceneMarker, TickRate } from '../engine/types';
 import { DEFAULT_APPEARANCE } from '../engine/types';
 import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import type { LibraryScene } from '../scenes/library';
@@ -112,10 +122,14 @@ export function App() {
   const [viewportTooSmall, setViewportTooSmall] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia(VIEWPORT_LOCK_QUERY).matches,
   );
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => new Set());
   const [timelineUnits, setTimelineUnits] = useState<'frame' | 'ms'>('frame');
+  const [rippleEdit, setRippleEdit] = useState(false);
+  const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
+  const [onionSkin, setOnionSkin] = useState(false);
   const [past, setPast] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
+  const clipboardRef = useRef<string>('');
   const activeDsl = previewDsl ?? dsl;
   const scene = useMemo(() => parseScene(activeDsl), [activeDsl]);
   const durationTicks = Math.max(1, Math.ceil((scene.duration / 1000) * appearance.tickRate));
@@ -191,21 +205,53 @@ export function App() {
     return () => mql.removeEventListener('change', handler);
   }, []);
 
-  const selectedEvent = useMemo(
-    () => scene.events.find((event) => event.id === selectedEventId) ?? null,
-    [scene.events, selectedEventId],
+  const selectedEvents = useMemo(
+    () => scene.events.filter((event) => selectedEventIds.has(event.id)),
+    [scene.events, selectedEventIds],
   );
+  const selectedEvent = selectedEvents[0] ?? null;
+  const tickMs = 1000 / appearance.tickRate;
+
+  const selectOne = useCallback((id: string | null) => {
+    setSelectedEventIds(id ? new Set([id]) : new Set());
+  }, []);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedEventIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectMany = useCallback((ids: string[], replace = true) => {
+    setSelectedEventIds((current) => {
+      const next = replace ? new Set<string>() : new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     clockRef.current?.stop();
     if (!playing) return;
     const clock = new TickClock(appearance.tickRate, (count) => {
-      setTick((current) => (current + count) % durationTicks);
+      setTick((current) => {
+        if (loopRegion) {
+          const startTick = Math.floor((loopRegion.startMs / 1000) * appearance.tickRate);
+          const endTick = Math.max(startTick + 1, Math.ceil((loopRegion.endMs / 1000) * appearance.tickRate));
+          if (current < startTick || current >= endTick) return startTick;
+          const span = endTick - startTick;
+          return startTick + ((current - startTick + count) % span);
+        }
+        return (current + count) % durationTicks;
+      });
     });
     clockRef.current = clock;
     clock.start();
     return () => clock.stop();
-  }, [appearance.tickRate, durationTicks, playing]);
+  }, [appearance.tickRate, durationTicks, loopRegion, playing]);
 
   function updateAppearance(patch: Partial<Appearance>) {
     setAppearance((current) => ({ ...current, ...patch }));
@@ -222,7 +268,7 @@ export function App() {
   function forkLibraryScene(libraryScene: LibraryScene) {
     commitDsl(libraryScene.dsl);
     setTick(0);
-    setSelectedEventId(null);
+    selectOne(null);
   }
 
   function createJob(target: ExportTarget) {
@@ -352,7 +398,7 @@ export function App() {
       commitDsl(imported.dsl);
       if (imported.appearance) setAppearance(imported.appearance);
       setImportError(null);
-      setSelectedEventId(null);
+      selectOne(null);
       setTick(0);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Import failed.');
@@ -363,7 +409,7 @@ export function App() {
     commitDsl(recent.dsl);
     setTick(0);
     setView('author');
-    setSelectedEventId(null);
+    selectOne(null);
   }
 
   const moveEvent = useCallback(
@@ -392,9 +438,9 @@ export function App() {
     (event: SceneEvent) => {
       const next = deleteEventInSource(dsl, event);
       commitDsl(next);
-      setSelectedEventId(null);
+      selectOne(null);
     },
-    [commitDsl, dsl],
+    [commitDsl, dsl, selectOne],
   );
 
   const patchEvent = useCallback(
@@ -425,9 +471,147 @@ export function App() {
       commitDsl(next);
       const reparsed = parseScene(next);
       const inserted = reparsed.events.find((evt) => evt.line === lineNumber);
-      if (inserted) setSelectedEventId(inserted.id);
+      if (inserted) selectOne(inserted.id);
     },
-    [appearance.tickRate, commitDsl, dsl, scene.duration],
+    [appearance.tickRate, commitDsl, dsl, scene.duration, selectOne],
+  );
+
+  const moveEvents = useCallback(
+    (events: SceneEvent[], deltaMs: number) => {
+      if (events.length === 0) return;
+      const next = moveEventsInSource({
+        source: dsl,
+        events,
+        deltaMs,
+        sceneDurationMs: scene.duration,
+        snapMs: tickMs,
+      });
+      commitDsl(next);
+    },
+    [commitDsl, dsl, scene.duration, tickMs],
+  );
+
+  const deleteEvents = useCallback(
+    (events: SceneEvent[]) => {
+      if (events.length === 0) return;
+      let next = deleteEventsInSource(dsl, events);
+      if (rippleEdit) {
+        // Ripple: shift later events left to close the gap, by the deleted span
+        const minAt = events.reduce((m, e) => Math.min(m, e.at), Number.POSITIVE_INFINITY);
+        const span = events.reduce((m, e) => Math.max(m, e.at + 1), 0) - minAt;
+        const reparsed = parseScene(next);
+        const after = reparsed.events.filter((e) => e.at > minAt);
+        if (after.length > 0 && span > 0) {
+          next = moveEventsInSource({
+            source: next,
+            events: after,
+            deltaMs: -span,
+            sceneDurationMs: reparsed.duration,
+            snapMs: tickMs,
+          });
+        }
+      }
+      commitDsl(next);
+      setSelectedEventIds(new Set());
+    },
+    [commitDsl, dsl, rippleEdit, tickMs],
+  );
+
+  const setEventFlag = useCallback(
+    (event: SceneEvent, flag: FlagName, value: boolean) => {
+      commitDsl(setEventFlagInSource(dsl, event, flag, value));
+    },
+    [commitDsl, dsl],
+  );
+
+  const splitEventAt = useCallback(
+    (event: SceneEvent, atMs: number) => {
+      const result = splitEventAtMs({ source: dsl, event, atMs, sceneDurationMs: scene.duration });
+      if (result.lineNumber === null) return;
+      commitDsl(result.source);
+      const reparsed = parseScene(result.source);
+      const newHalf = reparsed.events.find((e) => e.line === result.lineNumber);
+      if (newHalf) selectOne(newHalf.id);
+    },
+    [commitDsl, dsl, scene.duration, selectOne],
+  );
+
+  const addMarkerAt = useCallback(
+    (name: string, atMs: number) => {
+      const result = addMarkerToSource({ source: dsl, name, atMs, sceneDurationMs: scene.duration });
+      commitDsl(result.source);
+    },
+    [commitDsl, dsl, scene.duration],
+  );
+
+  const removeMarker = useCallback(
+    (marker: SceneMarker) => {
+      commitDsl(deleteMarkerInSource(dsl, marker));
+    },
+    [commitDsl, dsl],
+  );
+
+  const copySelectionToClipboard = useCallback(() => {
+    if (selectedEvents.length === 0) return;
+    const fragment = eventsToFragment(selectedEvents);
+    clipboardRef.current = fragment;
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(fragment).catch(() => undefined);
+    }
+  }, [selectedEvents]);
+
+  const pasteFromClipboard = useCallback(
+    async (atMs: number) => {
+      let fragment = clipboardRef.current;
+      if (!fragment && typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+        try {
+          fragment = await navigator.clipboard.readText();
+        } catch {
+          fragment = '';
+        }
+      }
+      if (!fragment.trim()) return;
+      const result = pasteEventLines({
+        source: dsl,
+        fragment,
+        atMs,
+        sceneDurationMs: scene.duration,
+        snapMs: tickMs,
+      });
+      if (result.insertedLines.length === 0) return;
+      commitDsl(result.source);
+      const reparsed = parseScene(result.source);
+      const inserted = reparsed.events.filter((event) => result.insertedLines.includes(event.line));
+      if (inserted.length > 0) selectMany(inserted.map((event) => event.id));
+    },
+    [commitDsl, dsl, scene.duration, selectMany, tickMs],
+  );
+
+  const cutSelectionToClipboard = useCallback(() => {
+    if (selectedEvents.length === 0) return;
+    copySelectionToClipboard();
+    deleteEvents(selectedEvents);
+  }, [copySelectionToClipboard, deleteEvents, selectedEvents]);
+
+  const rescaleSelectionTo = useCallback(
+    (toStartMs: number, toEndMs: number) => {
+      if (selectedEvents.length < 2) return;
+      const fromStart = selectedEvents.reduce((m, e) => Math.min(m, e.at), Number.POSITIVE_INFINITY);
+      const fromEnd = selectedEvents.reduce((m, e) => Math.max(m, e.at), 0);
+      if (fromEnd <= fromStart) return;
+      const next = rescaleEventsInSource({
+        source: dsl,
+        events: selectedEvents,
+        fromStart,
+        fromEnd,
+        toStart: toStartMs,
+        toEnd: toEndMs,
+        sceneDurationMs: scene.duration,
+        snapMs: tickMs,
+      });
+      commitDsl(next);
+    },
+    [commitDsl, dsl, scene.duration, selectedEvents, tickMs],
   );
 
   useEffect(() => {
@@ -443,6 +627,8 @@ export function App() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const meta = event.metaKey || event.ctrlKey;
+      const playheadMs = Math.round((tick / appearance.tickRate) * 1000);
+
       if (meta && event.key.toLowerCase() === 'z') {
         if (isFormElement(event.target)) return;
         event.preventDefault();
@@ -459,34 +645,91 @@ export function App() {
 
       if (isFormElement(event.target)) return;
 
+      if (meta && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        selectMany(scene.events.map((e) => e.id));
+        return;
+      }
+      if (meta && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        copySelectionToClipboard();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === 'x') {
+        event.preventDefault();
+        cutSelectionToClipboard();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        void pasteFromClipboard(playheadMs);
+        return;
+      }
+      if (meta && event.shiftKey && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        if (selectedEvent) splitEventAt(selectedEvent, playheadMs);
+        return;
+      }
+      if (event.key.toLowerCase() === 'm' && !meta) {
+        event.preventDefault();
+        addMarkerAt(`mark ${scene.markers.length + 1}`, playheadMs);
+        return;
+      }
+      if (event.key === ',' || event.key === '.') {
+        event.preventDefault();
+        const direction = event.key === '.' ? 1 : -1;
+        const stepFrames = event.shiftKey ? appearance.tickRate : 1;
+        setTick((current) => Math.max(0, Math.min(durationTicks - 1, current + direction * stepFrames)));
+        return;
+      }
+
       if (event.key === 'Escape') {
-        if (selectedEventId) {
+        if (selectedEventIds.size > 0) {
           event.preventDefault();
-          setSelectedEventId(null);
+          setSelectedEventIds(new Set());
         }
         return;
       }
 
-      if (!selectedEvent) return;
+      if (selectedEvents.length === 0) return;
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        deleteEvent(selectedEvent);
+        deleteEvents(selectedEvents);
         return;
       }
 
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
         const direction = event.key === 'ArrowRight' ? 1 : -1;
-        const tickMs = 1000 / appearance.tickRate;
         const stepMs = (event.shiftKey ? 10 : 1) * tickMs;
-        moveEvent(selectedEvent, selectedEvent.at + direction * stepMs);
+        moveEvents(selectedEvents, direction * stepMs);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [appearance.tickRate, deleteEvent, moveEvent, redo, selectedEvent, selectedEventId, undo]);
+  }, [
+    addMarkerAt,
+    appearance.tickRate,
+    copySelectionToClipboard,
+    cutSelectionToClipboard,
+    deleteEvents,
+    durationTicks,
+    moveEvents,
+    pasteFromClipboard,
+    redo,
+    scene.events,
+    scene.markers.length,
+    selectMany,
+    selectedEvent,
+    selectedEventIds.size,
+    selectedEvents,
+    splitEventAt,
+    tick,
+    tickMs,
+    undo,
+  ]);
 
   if (viewportTooSmall) {
     return <ViewportLock />;
@@ -618,7 +861,7 @@ export function App() {
             </div>
 
             <div className="preview-wrap">
-              <EnginePreview scene={scene} appearance={appearance} renderer={renderer} tick={tick} />
+              <EnginePreview scene={scene} appearance={appearance} renderer={renderer} tick={tick} onionSkin={onionSkin} />
             </div>
 
             <div className="transport" role="toolbar" aria-label="Playback transport">
@@ -700,19 +943,42 @@ export function App() {
               tick={tick}
               rate={appearance.tickRate}
               units={timelineUnits}
-              selectedEventId={selectedEventId}
+              selectedEventIds={selectedEventIds}
+              rippleEdit={rippleEdit}
+              onionSkin={onionSkin}
+              loopRegion={loopRegion}
               canUndo={past.length > 0}
               canRedo={future.length > 0}
+              past={past}
+              future={future}
               onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))}
               onUnitsChange={setTimelineUnits}
-              onSelect={setSelectedEventId}
+              onRippleChange={setRippleEdit}
+              onOnionSkinChange={setOnionSkin}
+              onLoopRegionChange={setLoopRegion}
+              onSelectOne={selectOne}
+              onSelectMany={selectMany}
+              onToggleSelection={toggleSelection}
               onMoveEvent={moveEvent}
+              onMoveEvents={moveEvents}
               onResizeEvent={resizeEvent}
               onDeleteEvent={deleteEvent}
+              onDeleteEvents={deleteEvents}
               onPatchEvent={patchEvent}
               onAddEventAt={addEventAt}
+              onSplitEvent={splitEventAt}
+              onSetEventFlag={setEventFlag}
+              onAddMarker={addMarkerAt}
+              onRemoveMarker={removeMarker}
+              onCopySelection={copySelectionToClipboard}
+              onCutSelection={cutSelectionToClipboard}
+              onPasteAt={pasteFromClipboard}
+              onRescaleSelection={rescaleSelectionTo}
               onUndo={undo}
               onRedo={redo}
+              onJumpToHistory={(stepsBack) => {
+                for (let i = 0; i < stepsBack; i += 1) undo();
+              }}
             />
           </section>
         </>

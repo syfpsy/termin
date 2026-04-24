@@ -13,13 +13,18 @@ type EnginePreviewProps = {
   appearance: Appearance;
   renderer: RendererKind;
   tick: number;
+  onionSkin?: boolean;
 };
 
-export function EnginePreview({ scene, appearance, renderer, tick }: EnginePreviewProps) {
+export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = false }: EnginePreviewProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const onionPrevRef = useRef<HTMLCanvasElement | null>(null);
+  const onionNextRef = useRef<HTMLCanvasElement | null>(null);
   const gridRef = useRef(new Grid(COLS, ROWS));
   const bufferRef = useRef(new PhosphorBuffer(COLS, ROWS));
+  const onionGridRef = useRef(new Grid(COLS, ROWS));
+  const onionBufferRef = useRef(new PhosphorBuffer(COLS, ROWS));
   const webglRef = useRef<WebGlPhosphorRenderer | null>(null);
   const lastTickRef = useRef(-1);
   const fingerprintRef = useRef('');
@@ -80,14 +85,55 @@ export function EnginePreview({ scene, appearance, renderer, tick }: EnginePrevi
       setError(message);
       renderBufferToCanvas(canvas, buffer, appearance, size);
     }
-  }, [appearance, fingerprint, renderer, scene, size, tick]);
+
+    if (onionSkin) {
+      const prevCanvas = onionPrevRef.current;
+      const nextCanvas = onionNextRef.current;
+      const onionGrid = onionGridRef.current;
+      const onionBuffer = onionBufferRef.current;
+      const dim: Appearance = { ...appearance, bloom: appearance.bloom * 0.4 };
+
+      if (prevCanvas && tick > 0) {
+        onionBuffer.reset();
+        const start = Math.max(0, tick - 6);
+        for (let i = start; i < tick; i += 1) {
+          evaluateScene(scene, onionGrid, i, appearance.tickRate);
+          onionBuffer.update(onionGrid, dt, appearance.decay);
+        }
+        renderBufferToCanvas(prevCanvas, onionBuffer, dim, size);
+      } else if (prevCanvas) {
+        const ctx = prevCanvas.getContext('2d');
+        ctx?.clearRect(0, 0, prevCanvas.width, prevCanvas.height);
+      }
+
+      if (nextCanvas) {
+        onionBuffer.reset();
+        const lookahead = Math.min(durationTicksFor(scene, appearance.tickRate), tick + 6);
+        for (let i = 0; i <= lookahead; i += 1) {
+          evaluateScene(scene, onionGrid, i, appearance.tickRate);
+          onionBuffer.update(onionGrid, dt, appearance.decay);
+        }
+        renderBufferToCanvas(nextCanvas, onionBuffer, dim, size);
+      }
+    }
+  }, [appearance, fingerprint, onionSkin, renderer, scene, size, tick]);
 
   return (
     <div ref={frameRef} className={`crt crt--${appearance.chrome}`}>
+      {onionSkin && (
+        <>
+          <canvas ref={onionPrevRef} className="crt__onion crt__onion--prev" aria-hidden="true" />
+          <canvas ref={onionNextRef} className="crt__onion crt__onion--next" aria-hidden="true" />
+        </>
+      )}
       <canvas ref={canvasRef} className="crt__canvas" aria-label="Phosphor scene preview" />
       <div className="crt__scan" style={{ opacity: appearance.scanlines }} />
       {appearance.chrome === 'bezel' && <div className="crt__curve" />}
       {error && <div className="crt__error">{error}</div>}
     </div>
   );
+}
+
+function durationTicksFor(scene: ParsedScene, tickRate: number): number {
+  return Math.max(1, Math.ceil((scene.duration / 1000) * tickRate));
 }

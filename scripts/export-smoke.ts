@@ -16,16 +16,27 @@ import { renderSvgAnimation, renderSvgPoster, svgFileName } from '../src/export/
 import { parseScene } from '../src/engine/dsl';
 import {
   addEventToSource,
+  addMarkerToSource,
   clampEventTime,
   defaultEventTemplate,
   deleteEventInSource,
+  deleteEventsInSource,
+  deleteMarkerInSource,
   eventToLine,
+  eventsToFragment,
   formatEventLine,
   isResizable,
   moveEventInSource,
+  moveEventsInSource,
+  pasteEventLines,
   patchEventInSource,
+  rescaleEventsInSource,
   resizeEventInSource,
   setDurationModifier,
+  setEventFlagInSource,
+  setFlagInModifiers,
+  splitEventAtMs,
+  stripFlagsFromModifiers,
 } from '../src/engine/dslEdit';
 
 const bundle = buildPhosphorBundle({
@@ -326,6 +337,135 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
       `template for ${effect} must parse cleanly`,
     );
   }
+}
+
+// AE-style multi-op DSL helpers
+{
+  const baseSource = `scene multi 3s\nat 0ms type "FIRST" slowly\nat 600ms pulse "second" amber 400ms\nat 1500ms glitch "THIRD" 80ms burst`;
+  const parsed = parseScene(baseSource);
+  assert.equal(parsed.events.length, 3, 'baseline parse');
+  assert.equal(parsed.events.every((event) => event.flags.muted === false), true, 'no events start muted');
+
+  // flag toggling
+  const muted = setEventFlagInSource(baseSource, parsed.events[0], 'muted', true);
+  const mutedScene = parseScene(muted);
+  assert.equal(mutedScene.events[0].flags.muted, true, 'mute flag set');
+  assert.equal(mutedScene.events[0].modifiers.includes('muted'), true, 'modifiers contain muted token');
+
+  const unmuted = setEventFlagInSource(muted, mutedScene.events[0], 'muted', false);
+  assert.equal(parseScene(unmuted).events[0].flags.muted, false, 'unmute removes flag');
+  assert.equal(setFlagInModifiers('amber 400ms', 'solo', true), 'amber 400ms solo');
+  assert.equal(setFlagInModifiers('amber solo 400ms', 'solo', false), 'amber 400ms');
+
+  // multi-move respects scene duration clamping
+  const groupShifted = moveEventsInSource({
+    source: baseSource,
+    events: [parsed.events[0], parsed.events[1]],
+    deltaMs: 500,
+    sceneDurationMs: 3000,
+    snapMs: 0,
+  });
+  const shiftedScene = parseScene(groupShifted);
+  assert.equal(shiftedScene.events[0].at, 500, 'group move first event');
+  assert.equal(shiftedScene.events[1].at, 1100, 'group move second event');
+  assert.equal(shiftedScene.events[2].at, 1500, 'untouched event stays put');
+
+  // group delete removes both
+  const groupDeleted = deleteEventsInSource(baseSource, [parsed.events[0], parsed.events[2]]);
+  assert.equal(parseScene(groupDeleted).events.length, 1, 'group delete leaves 1 event');
+
+  // split
+  const splitResult = splitEventAtMs({
+    source: baseSource,
+    event: parsed.events[1],
+    atMs: 800,
+    sceneDurationMs: 3000,
+  });
+  assert.ok(splitResult.lineNumber !== null, 'split returns the new line number');
+  const splitScene = parseScene(splitResult.source);
+  assert.equal(splitScene.events.length, 4, 'split produces 4 events');
+  const pulses = splitScene.events.filter((e) => e.effect === 'pulse');
+  assert.equal(pulses.length, 2, 'two pulse halves');
+  assert.equal(pulses[0].at, 600, 'first half keeps original time');
+  assert.equal(pulses[1].at, 800, 'second half starts at split point');
+  assert.ok(pulses[0].modifiers.includes('200ms'), 'first half duration is split offset');
+  assert.ok(pulses[1].modifiers.includes('200ms'), 'second half duration is remainder');
+
+  // split refuses non-resizable
+  const splitNoop = splitEventAtMs({
+    source: baseSource,
+    event: parsed.events[0], // type
+    atMs: 200,
+    sceneDurationMs: 3000,
+  });
+  assert.equal(splitNoop.lineNumber, null, 'split refuses non-resizable effect');
+  assert.equal(splitNoop.source, baseSource, 'split returns original source on no-op');
+
+  // rescale
+  const rescaled = rescaleEventsInSource({
+    source: baseSource,
+    events: parsed.events.slice(0, 2),
+    fromStart: 0,
+    fromEnd: 600,
+    toStart: 0,
+    toEnd: 1200,
+    sceneDurationMs: 3000,
+    snapMs: 0,
+  });
+  const rescaledScene = parseScene(rescaled);
+  assert.equal(rescaledScene.events[0].at, 0, 'rescale anchor stays at start');
+  assert.equal(rescaledScene.events[1].at, 1200, 'rescale stretches second event');
+
+  // markers
+  const withMarker = addMarkerToSource({
+    source: baseSource,
+    name: 'beat one',
+    atMs: 500,
+    sceneDurationMs: 3000,
+  });
+  const markerScene = parseScene(withMarker.source);
+  assert.equal(markerScene.markers.length, 1, 'marker registered');
+  assert.equal(markerScene.markers[0].name, 'beat one', 'marker name preserved');
+  assert.equal(markerScene.markers[0].at, 500, 'marker at preserved');
+
+  const removedMarker = deleteMarkerInSource(withMarker.source, markerScene.markers[0]);
+  assert.equal(parseScene(removedMarker).markers.length, 0, 'marker removable');
+
+  // copy / paste round-trip
+  const fragment = eventsToFragment([parsed.events[0], parsed.events[2]]);
+  const pasted = pasteEventLines({
+    source: baseSource,
+    fragment,
+    atMs: 2000,
+    sceneDurationMs: 3000,
+    snapMs: 0,
+  });
+  const pastedScene = parseScene(pasted.source);
+  assert.equal(pastedScene.events.length, 5, 'paste appends 2 events');
+  assert.equal(pasted.insertedLines.length, 2, 'paste returns inserted line numbers');
+  // first pasted event lands exactly at 2000ms; second preserves +1500 offset → 3500ms but clamped to 3000
+  const newOnes = pastedScene.events.filter((event) => event.line >= pasted.insertedLines[0]);
+  assert.equal(newOnes[0].at, 2000, 'first pasted event lands at paste anchor');
+  assert.ok(newOnes.some((event) => event.at === 3000), 'second pasted event clamps to scene duration');
+
+  // flag tokens stripped on paste
+  const flaggedSource = `scene src 1s\nat 0ms pulse "lock me" amber 200ms muted locked`;
+  const flaggedParsed = parseScene(flaggedSource);
+  const flaggedFragment = eventsToFragment(flaggedParsed.events);
+  assert.ok(!flaggedFragment.includes('muted'), 'fragment strips muted flag');
+  assert.ok(!flaggedFragment.includes('locked'), 'fragment strips locked flag');
+  assert.equal(stripFlagsFromModifiers('amber muted 400ms locked'), 'amber 400ms');
+}
+
+// markers + flag-aware engine smoke
+{
+  const sceneSrc = `scene mute_test 1s\nat 0ms type "A"\nat 200ms type "B" muted\nat 400ms type "C" solo\nmark "beat" 500ms`;
+  const parsed = parseScene(sceneSrc);
+  assert.equal(parsed.markers.length, 1, 'marker line parses');
+  const muted = parsed.events.find((e) => e.target === 'B');
+  const solo = parsed.events.find((e) => e.target === 'C');
+  assert.equal(muted?.flags.muted, true, 'B is muted');
+  assert.equal(solo?.flags.solo, true, 'C is solo');
 }
 
 console.log(

@@ -34,8 +34,11 @@ export function evaluateScene(scene: ParsedScene, grid: Grid, tick: number, tick
   grid.writeText(4, 1, `PHOSPHOR / ${scene.name}`, 'inkDim', 0.45);
 
   const ctx: PrimitiveContext = { grid, scene, timeMs, tick, tickRate, layout };
+  const hasSolo = scene.events.some((event) => event.flags.solo && !event.flags.muted);
   for (const event of scene.events) {
     if (timeMs < event.at) continue;
+    if (event.flags.muted) continue;
+    if (hasSolo && !event.flags.solo) continue;
     applyPrimitive(event, ctx);
   }
 }

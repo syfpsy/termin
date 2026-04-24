@@ -1,5 +1,5 @@
-import { estimateEventDuration, parseFirstDuration } from './dsl';
-import type { SceneEvent } from './types';
+import { estimateEventDuration, isFlagToken, parseFirstDuration } from './dsl';
+import type { EventFlags, SceneEvent, SceneMarker } from './types';
 
 /**
  * Effects whose duration is encoded in the modifiers and is therefore resizable.
@@ -217,4 +217,264 @@ export function inferDisplayDuration(event: SceneEvent, tickRate = 30): number {
 
 function sanitizeTarget(target: string): string {
   return target.replace(/"/g, '').replace(/\s+/g, ' ').trim();
+}
+
+export type FlagName = keyof EventFlags;
+
+export function setFlagInModifiers(modifiers: string, flag: FlagName, value: boolean): string {
+  const tokens = modifiers.split(/\s+/).filter(Boolean);
+  const without = tokens.filter((token) => token !== flag);
+  return value ? [...without, flag].join(' ').trim() : without.join(' ').trim();
+}
+
+export function setEventFlagInSource(
+  source: string,
+  event: SceneEvent,
+  flag: FlagName,
+  value: boolean,
+): string {
+  const nextModifiers = setFlagInModifiers(event.modifiers, flag, value);
+  return replaceLine(
+    source,
+    event.line,
+    formatEventLine({
+      atMs: event.at,
+      effect: event.effect,
+      target: event.target,
+      modifiers: nextModifiers,
+    }),
+  );
+}
+
+export type SplitInput = {
+  source: string;
+  event: SceneEvent;
+  atMs: number;
+  sceneDurationMs: number;
+};
+
+/**
+ * Split a duration-bearing event at `atMs`. The original line is shortened to
+ * end at the cut point; a new event line is appended starting at the cut with
+ * the remainder of the duration.
+ */
+export function splitEventAtMs(input: SplitInput): LineEditResult {
+  if (!isResizable(input.event.effect)) return { source: input.source, lineNumber: null };
+  const totalDuration = inferDisplayDuration(input.event, 30);
+  const cutMs = clampEventTime(input.atMs, input.sceneDurationMs);
+  const offset = cutMs - input.event.at;
+  if (offset <= MIN_SPLIT_OFFSET || totalDuration - offset <= MIN_SPLIT_OFFSET) {
+    return { source: input.source, lineNumber: null };
+  }
+
+  const firstHalf = replaceLine(
+    input.source,
+    input.event.line,
+    formatEventLine({
+      atMs: input.event.at,
+      effect: input.event.effect,
+      target: input.event.target,
+      modifiers: setDurationModifier(input.event.modifiers, offset),
+    }),
+  );
+  return appendLine(
+    firstHalf,
+    formatEventLine({
+      atMs: cutMs,
+      effect: input.event.effect,
+      target: input.event.target,
+      modifiers: setDurationModifier(input.event.modifiers, totalDuration - offset),
+    }),
+  );
+}
+
+const MIN_SPLIT_OFFSET = 30;
+
+export type MultiMoveInput = {
+  source: string;
+  events: SceneEvent[];
+  deltaMs: number;
+  sceneDurationMs: number;
+  snapMs?: number;
+};
+
+export function moveEventsInSource(input: MultiMoveInput): string {
+  if (input.events.length === 0) return input.source;
+  // Clamp delta so no event under it goes negative or past the scene end.
+  const minAt = input.events.reduce((m, e) => Math.min(m, e.at), Number.POSITIVE_INFINITY);
+  const maxAt = input.events.reduce((m, e) => Math.max(m, e.at), 0);
+  const minAllowed = -minAt;
+  const maxAllowed = input.sceneDurationMs - maxAt;
+  const clampedDelta = Math.max(minAllowed, Math.min(maxAllowed, input.deltaMs));
+
+  let next = input.source;
+  for (const event of input.events) {
+    const targetMs = clampEventTime(event.at + clampedDelta, input.sceneDurationMs, input.snapMs);
+    next = replaceLine(
+      next,
+      event.line,
+      formatEventLine({
+        atMs: targetMs,
+        effect: event.effect,
+        target: event.target,
+        modifiers: event.modifiers,
+      }),
+    );
+  }
+  return next;
+}
+
+/**
+ * Delete multiple events. Sort descending by line so subsequent removals
+ * don't disturb the indices of earlier ones.
+ */
+export function deleteEventsInSource(source: string, events: SceneEvent[]): string {
+  const sorted = [...events].sort((a, b) => b.line - a.line);
+  let next = source;
+  for (const event of sorted) {
+    next = removeLine(next, event.line);
+  }
+  return next;
+}
+
+export type RescaleInput = {
+  source: string;
+  events: SceneEvent[];
+  fromStart: number;
+  fromEnd: number;
+  toStart: number;
+  toEnd: number;
+  sceneDurationMs: number;
+  snapMs?: number;
+};
+
+/**
+ * Map each event's `at` from one window to another linearly. Events fully
+ * outside the source window are unchanged.
+ */
+export function rescaleEventsInSource(input: RescaleInput): string {
+  const fromSpan = Math.max(1, input.fromEnd - input.fromStart);
+  const toSpan = input.toEnd - input.toStart;
+  let next = input.source;
+  for (const event of input.events) {
+    if (event.at < input.fromStart || event.at > input.fromEnd) continue;
+    const ratio = (event.at - input.fromStart) / fromSpan;
+    const targetMs = clampEventTime(input.toStart + ratio * toSpan, input.sceneDurationMs, input.snapMs);
+    next = replaceLine(
+      next,
+      event.line,
+      formatEventLine({
+        atMs: targetMs,
+        effect: event.effect,
+        target: event.target,
+        modifiers: event.modifiers,
+      }),
+    );
+  }
+  return next;
+}
+
+export type MarkerAddInput = {
+  source: string;
+  name: string;
+  atMs: number;
+  sceneDurationMs: number;
+};
+
+export function addMarkerToSource(input: MarkerAddInput): LineEditResult {
+  const at = clampEventTime(input.atMs, input.sceneDurationMs);
+  const safeName = input.name.replace(/"/g, '').slice(0, 80) || 'marker';
+  return appendLine(input.source, `mark "${safeName}" ${at}ms`);
+}
+
+export function deleteMarkerInSource(source: string, marker: SceneMarker): string {
+  return removeLine(source, marker.line);
+}
+
+export function moveMarkerInSource(
+  source: string,
+  marker: SceneMarker,
+  atMs: number,
+  sceneDurationMs: number,
+): string {
+  const at = clampEventTime(atMs, sceneDurationMs);
+  return replaceLine(source, marker.line, `mark "${marker.name.replace(/"/g, '')}" ${at}ms`);
+}
+
+export function renameMarkerInSource(source: string, marker: SceneMarker, name: string): string {
+  const safeName = name.replace(/"/g, '').slice(0, 80) || marker.name;
+  return replaceLine(source, marker.line, `mark "${safeName}" ${marker.at}ms`);
+}
+
+/**
+ * Strip flag tokens (muted/solo/locked) from modifiers — used when pasting
+ * events so the new copy starts in a neutral state.
+ */
+export function stripFlagsFromModifiers(modifiers: string): string {
+  return modifiers
+    .split(/\s+/)
+    .filter((token) => token && !isFlagToken(token))
+    .join(' ');
+}
+
+export type PasteInput = {
+  source: string;
+  fragment: string;
+  atMs: number;
+  sceneDurationMs: number;
+  snapMs?: number;
+};
+
+/**
+ * Paste a clipboard fragment of `.me` event lines starting at `atMs`.
+ * The earliest event in the fragment lands at `atMs`; later ones preserve
+ * their relative offsets.
+ */
+export function pasteEventLines(input: PasteInput): { source: string; insertedLines: number[] } {
+  const lines = input.fragment.replace(/\r\n/g, '\n').split('\n');
+  const eventLines: Array<{ at: number; effect: string; target: string; modifiers: string }> = [];
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = trimmed.match(/^at\s+(\d+(?:\.\d+)?)(ms|s)\s+([a-zA-Z][a-zA-Z0-9-]*)\s*(.*)$/);
+    if (!match) continue;
+    const [, value, unit, effect, tail] = match;
+    const at = unit === 's' ? Math.round(Number(value) * 1000) : Math.round(Number(value));
+    const quote = tail.match(/"([^"]*)"/);
+    const target = quote?.[1] ?? '';
+    const modifiers = tail.replace(/"[^"]*"/, '').trim().replace(/\s+/g, ' ');
+    eventLines.push({ at, effect, target, modifiers });
+  }
+  if (eventLines.length === 0) return { source: input.source, insertedLines: [] };
+
+  const baseAt = eventLines.reduce((min, line) => Math.min(min, line.at), Number.POSITIVE_INFINITY);
+  let next = input.source;
+  const insertedLines: number[] = [];
+  for (const line of eventLines) {
+    const offset = line.at - baseAt;
+    const at = clampEventTime(input.atMs + offset, input.sceneDurationMs, input.snapMs);
+    const formatted = formatEventLine({
+      atMs: at,
+      effect: line.effect,
+      target: sanitizeTarget(line.target),
+      modifiers: stripFlagsFromModifiers(line.modifiers),
+    });
+    const result = appendLine(next, formatted);
+    next = result.source;
+    if (result.lineNumber !== null) insertedLines.push(result.lineNumber);
+  }
+  return { source: next, insertedLines };
+}
+
+export function eventsToFragment(events: SceneEvent[]): string {
+  return events
+    .map((event) =>
+      formatEventLine({
+        atMs: event.at,
+        effect: event.effect,
+        target: event.target,
+        modifiers: stripFlagsFromModifiers(event.modifiers),
+      }),
+    )
+    .join('\n');
 }

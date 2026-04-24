@@ -1,4 +1,4 @@
-import type { ParsedLine, ParsedScene, SceneEvent } from './types';
+import type { EventFlags, ParsedLine, ParsedScene, SceneEvent, SceneMarker } from './types';
 
 export const DEFAULT_DSL = `scene boot_sequence_v3 2.4s
 # three status OKs stagger in, typed one glyph per tick
@@ -16,12 +16,15 @@ at 2080ms cursor "_" blink 500ms`;
 
 const SCENE_RE = /^scene\s+([a-zA-Z0-9_-]+)\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
 const EVENT_RE = /^at\s+(\d+(?:\.\d+)?(?:ms|s))\s+([a-zA-Z][a-zA-Z0-9-]*)\s*(.*)$/;
+const MARKER_RE = /^mark\s+"([^"]*)"\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
 const QUOTED_RE = /"([^"]*)"/;
+const FLAG_TOKENS = new Set(['muted', 'solo', 'locked']);
 
 export function parseScene(source: string): ParsedScene {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
   const parsedLines: ParsedLine[] = [];
   const events: SceneEvent[] = [];
+  const markers: SceneMarker[] = [];
   let name = 'untitled_scene';
   let duration = 2400;
 
@@ -47,6 +50,25 @@ export function parseScene(source: string): ParsedScene {
       return;
     }
 
+    const markerMatch = trimmed.match(MARKER_RE);
+    if (markerMatch) {
+      const at = parseTime(markerMatch[2]);
+      if (at === null) {
+        parsedLines.push({ kind: 'invalid', number, raw, error: `Invalid marker time: ${markerMatch[2]}` });
+        return;
+      }
+      const marker: SceneMarker = {
+        id: `mark-${number}-${at}`,
+        line: number,
+        name: markerMatch[1],
+        at,
+        raw,
+      };
+      markers.push(marker);
+      parsedLines.push({ kind: 'marker', number, raw, marker });
+      return;
+    }
+
     const eventMatch = trimmed.match(EVENT_RE);
     if (!eventMatch) {
       parsedLines.push({
@@ -67,15 +89,17 @@ export function parseScene(source: string): ParsedScene {
 
     const quoteMatch = tail.match(QUOTED_RE);
     const target = quoteMatch?.[1] ?? '';
-    const modifiers = tail.replace(QUOTED_RE, '').trim().replace(/\s+/g, ' ');
+    const rawModifiers = tail.replace(QUOTED_RE, '').trim().replace(/\s+/g, ' ');
+    const flags = extractFlags(rawModifiers);
     const event: SceneEvent = {
       id: `${number}-${effect}-${at}`,
       line: number,
       at,
       effect,
       target,
-      modifiers,
+      modifiers: rawModifiers,
       raw,
+      flags,
     };
 
     events.push(event);
@@ -87,8 +111,22 @@ export function parseScene(source: string): ParsedScene {
     name,
     duration: Math.max(duration, maxEventTime, 1000),
     events: events.sort((a, b) => a.at - b.at || a.line - b.line),
+    markers: markers.sort((a, b) => a.at - b.at),
     lines: parsedLines,
   };
+}
+
+export function extractFlags(modifiers: string): EventFlags {
+  const tokens = new Set(modifiers.split(/\s+/).filter(Boolean));
+  return {
+    muted: tokens.has('muted'),
+    solo: tokens.has('solo'),
+    locked: tokens.has('locked'),
+  };
+}
+
+export function isFlagToken(token: string): boolean {
+  return FLAG_TOKENS.has(token);
 }
 
 export function parseTime(token: string): number | null {

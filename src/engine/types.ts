@@ -51,6 +51,12 @@ export type EffectName =
   | 'reveal'
   | string;
 
+export type EventFlags = {
+  muted: boolean;
+  solo: boolean;
+  locked: boolean;
+};
+
 export type SceneEvent = {
   id: string;
   line: number;
@@ -58,6 +64,15 @@ export type SceneEvent = {
   effect: EffectName;
   target: string;
   modifiers: string;
+  raw: string;
+  flags: EventFlags;
+};
+
+export type SceneMarker = {
+  id: string;
+  line: number;
+  name: string;
+  at: number;
   raw: string;
 };
 
@@ -81,6 +96,12 @@ export type ParsedLine =
       event: SceneEvent;
     }
   | {
+      kind: 'marker';
+      number: number;
+      raw: string;
+      marker: SceneMarker;
+    }
+  | {
       kind: 'invalid';
       number: number;
       raw: string;
@@ -91,6 +112,7 @@ export type ParsedScene = {
   name: string;
   duration: number;
   events: SceneEvent[];
+  markers: SceneMarker[];
   lines: ParsedLine[];
 };
 
