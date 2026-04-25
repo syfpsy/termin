@@ -40,10 +40,12 @@ export function AccountPanel({ session }: AccountPanelProps) {
   }
 
   if (session) {
+    const rawProvider = session.user.app_metadata?.provider;
+    // Supabase returns "email" for magic-link sign-ins and "google" /
+    // "github" / etc. for OAuth. Phosphor only ships email + Google
+    // today, so the friendly label is unambiguous.
     const provider =
-      typeof session.user.app_metadata?.provider === 'string'
-        ? session.user.app_metadata.provider
-        : 'magic link';
+      rawProvider === 'email' ? 'magic link' : typeof rawProvider === 'string' ? rawProvider : 'unknown';
     const createdAt = session.user.created_at ? new Date(session.user.created_at).toLocaleDateString() : '—';
 
     return (

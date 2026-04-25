@@ -169,7 +169,6 @@ function EffectControlsBody({
           type="button"
           className="slider-row__keyframe slider-row__keyframe--disabled"
           aria-label="Animate target text — coming soon"
-          aria-disabled
           title="String-valued keyframes for target text are coming next iteration"
           disabled
         >

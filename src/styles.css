@@ -617,7 +617,7 @@ input {
   display: inline-block;
   inline-size: 8px;
   font-size: 8px;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   text-align: center;
   flex: 0 0 auto;
 }
@@ -644,7 +644,7 @@ input {
 }
 
 .panel__flags {
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   font-size: 8px;
   letter-spacing: 0.12em;
   margin-left: 3px;
@@ -678,7 +678,7 @@ input {
 }
 
 .button {
-  height: 24px;
+  height: 28px;
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--bezel-hi);
@@ -686,7 +686,7 @@ input {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 3px 9px;
+  padding: 4px 10px;
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -2151,9 +2151,9 @@ input {
   border: 1px solid transparent;
   color: var(--ink-muted);
   cursor: pointer;
-  padding: 3px;
-  inline-size: 22px;
-  block-size: 22px;
+  padding: 4px;
+  inline-size: 26px;
+  block-size: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2549,7 +2549,7 @@ input {
   font-size: 8px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
 }
 
 .titlebar-menu__preface strong {
@@ -2573,7 +2573,7 @@ input {
   font-size: 8px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
 }
 
 .titlebar-menu__item {
@@ -2598,7 +2598,8 @@ input {
 }
 
 .titlebar-menu__item:disabled {
-  color: var(--ink-faint);
+  color: var(--ink-muted);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -2609,7 +2610,7 @@ input {
 .titlebar-menu__item kbd {
   font-family: inherit;
   font-size: 9px;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   letter-spacing: 0.06em;
 }
 
@@ -2646,7 +2647,7 @@ input {
   font-size: 8px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -2697,7 +2698,7 @@ input {
   font-size: 8px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -2804,7 +2805,7 @@ input {
   align-items: center;
   gap: 4px;
   font-size: 9px;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -2855,7 +2856,7 @@ input {
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
 }
 
 .account-panel__actions {

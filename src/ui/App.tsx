@@ -173,6 +173,10 @@ export function App() {
   const [dsl, setDsl] = useState<string>(DEFAULT_DSL);
   const [previewDsl, setPreviewDsl] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  // Tracks whether the initial session check has completed. Used to
+  // avoid flashing the "sign in" chip in the titlebar on page reload
+  // when the user is actually already signed in.
+  const [authReady, setAuthReady] = useState(false);
   const [appearance, setAppearance] = useState<Appearance>(() => ({ ...DEFAULT_APPEARANCE, ...loadAppearance() }));
   const [renderer, setRenderer] = useState<RendererKind>(loadRenderer);
   const [provider, setProvider] = useState<ProviderKind>(loadProvider);
@@ -257,6 +261,11 @@ export function App() {
   }, [dsl]);
 
   // Boot: load (or migrate) the active project, then seed the editor.
+  // The legacy `phosphor.scene.dsl` localStorage key is the ONLY carrier
+  // of the user's last-edited DSL across the v1 → project-model upgrade,
+  // so we read it here. After the first successful boot,
+  // clearLegacyState() removes it; the IDB project is then the source of
+  // truth and this read returns null (DEFAULT_DSL is unused).
   useEffect(() => {
     let cancelled = false;
     const seed = (typeof window !== 'undefined' && window.localStorage.getItem('phosphor.scene.dsl')) || DEFAULT_DSL;
@@ -281,13 +290,19 @@ export function App() {
   // session. The CloudPanel and the new account panel both read from
   // this state instead of running their own listeners.
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setAuthReady(true);
+      return;
+    }
     let cancelled = false;
     void getCurrentSession().then((current) => {
-      if (!cancelled) setSession(current);
+      if (cancelled) return;
+      setSession(current);
+      setAuthReady(true);
     });
     const unsub = onAuthStateChange((next) => {
       setSession(next);
+      setAuthReady(true);
     });
     return () => {
       cancelled = true;
@@ -1375,7 +1390,7 @@ export function App() {
         <Button icon={<Code2 size={13} />} tone="prim" onClick={() => exportHtmlEmbed(scene.name, dsl, appearance)}>
           html
         </Button>
-        {isSupabaseConfigured && (
+        {isSupabaseConfigured && authReady && (
           session ? (
             <TitlebarMenu
               label={truncateEmail(session.user.email ?? 'signed in')}
