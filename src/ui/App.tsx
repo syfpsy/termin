@@ -84,6 +84,7 @@ import { SceneLibrary } from './SceneLibrary';
 import {
   AdminSurface,
   AssetsSurface,
+  DocsSurface,
   EffectDetailSurface,
   EmptySurface,
   ExportSurface,
@@ -95,7 +96,17 @@ import {
 } from './Surfaces';
 import { Timeline } from './Timeline';
 
-type AppView = 'author' | 'start' | 'library' | 'effects' | 'assets' | 'export' | 'admin' | 'settings' | 'empty';
+type AppView =
+  | 'author'
+  | 'start'
+  | 'library'
+  | 'effects'
+  | 'assets'
+  | 'export'
+  | 'docs'
+  | 'admin'
+  | 'settings'
+  | 'empty';
 
 const NAV_ITEMS: Array<{ view: AppView; label: string }> = [
   { view: 'author', label: 'author' },
@@ -104,6 +115,7 @@ const NAV_ITEMS: Array<{ view: AppView; label: string }> = [
   { view: 'effects', label: 'effects' },
   { view: 'assets', label: 'assets' },
   { view: 'export', label: 'export' },
+  { view: 'docs', label: 'docs' },
   { view: 'admin', label: 'admin' },
   { view: 'settings', label: 'settings' },
   { view: 'empty', label: 'new' },
@@ -1231,6 +1243,7 @@ export function App() {
               onOpenAuthor={() => setView('author')}
             />
           )}
+          {view === 'docs' && <DocsSurface />}
           {view === 'empty' && <EmptySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
           <aside className="surface-side" aria-label="Scene state and recents">
             <SceneSummaryPanel scene={scene} />

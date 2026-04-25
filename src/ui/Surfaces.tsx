@@ -1,12 +1,16 @@
 import {
   ArrowRight,
   Code2,
+  Copy,
   Download,
   FileJson,
   GitFork,
+  Link2,
   SlidersHorizontal,
 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { exportBundleJson, exportHtmlEmbed, exportMeFile } from '../director/client';
+import { buildLoopUrl, type LoopUrlResult } from '../export/loopUrl';
 import { estimateEventDuration, eventTone } from '../engine/dsl';
 import type { Appearance, ParsedScene, ProviderKind, RendererKind, TickRate } from '../engine/types';
 import { ASSET_CATALOG } from '../assets/catalog';
@@ -56,33 +60,265 @@ const EFFECT_DETAILS = [
 ];
 
 export function StartSurface({ onForkScene, onOpenAuthor }: Pick<SharedSurfaceProps, 'onForkScene' | 'onOpenAuthor'>) {
+  const featured = SCENE_LIBRARY.slice(0, 6);
   const first = SCENE_LIBRARY[0];
   return (
     <section className="surface surface--start">
-      <div className="start-signal">
+      <header className="start-signal">
         <Phos size={74}>PHOSPHOR</Phos>
-        <p>Terminal motion engine. Vibe-code a scene, inspect the notation, tune the phosphor, then export the loop.</p>
+        <p>
+          A terminal-art motion design tool. Describe a scene in plain language, edit a small text DSL, scrub the
+          timeline like After Effects, and export a self-contained loop you can drop into any web app.
+        </p>
         <div className="start-actions">
           <Button tone="prim" icon={<ArrowRight size={14} />} onClick={onOpenAuthor}>
-            open author
+            open studio
           </Button>
           <Button icon={<GitFork size={14} />} onClick={() => onForkScene(first)}>
-            fork boot
+            fork boot sequence
           </Button>
+          <a className="start-docs-link" href="#docs">
+            read the docs →
+          </a>
         </div>
-      </div>
+      </header>
+
       <div className="promise-grid">
-        {['describe motion', 'commit notation', 'render phosphor'].map((label, index) => (
+        {[
+          {
+            label: 'describe motion',
+            copy: 'AI director drafts .me notation from plain language; you commit, preview, or rewrite.',
+          },
+          {
+            label: 'edit on a real timeline',
+            copy: 'Drag, resize, snap, mute / solo / lock, multi-select, ripple, markers, loop region, history.',
+          },
+          {
+            label: 'animate appearance',
+            copy: 'Per-property keyframes with linear / ease-in / ease-out / hold, edited via diamonds on the timeline.',
+          },
+          {
+            label: 'export anywhere',
+            copy: '.me, .phosphor.json, HTML, MP4, WebM, GIF, animated SVG, PNG sequence, loop URL — all locally.',
+          },
+          {
+            label: 'drop into your app',
+            copy: 'A 28 kB phosphor-player web component plays bundles in any framework.',
+          },
+          {
+            label: 'distinct on purpose',
+            copy: 'Phosphor green, amber, cyan, magenta. Bezel CRT framing. No glassmorphism, no AI-slop palette.',
+          },
+        ].map(({ label, copy }, index) => (
           <Panel key={label} title={`0${index + 1}`} dense>
-            <Phos size={34}>{label}</Phos>
-            <p className="surface-copy">
-              {index === 0 && 'Director drafts valid .me syntax from plain language.'}
-              {index === 1 && 'Parsed lines stay readable and invalid lines never block preview.'}
-              {index === 2 && 'Canvas and WebGL consume the same decay buffer.'}
-            </p>
+            <Phos size={28}>{label}</Phos>
+            <p className="surface-copy">{copy}</p>
           </Panel>
         ))}
       </div>
+
+      <Panel title="START FROM A SEED" flags={`${SCENE_LIBRARY.length} library scenes`} flush>
+        <div className="surface-grid surface-grid--start">
+          {featured.map((scene) => (
+            <button
+              key={scene.id}
+              type="button"
+              className="scene-card"
+              onClick={() => {
+                onForkScene(scene);
+                onOpenAuthor();
+              }}
+            >
+              <div>
+                <Label>{scene.shelf}</Label>
+                <Phos size={26}>{scene.name}</Phos>
+                <p>{scene.description}</p>
+              </div>
+              <MiniPreview dsl={scene.dsl} />
+              <span>
+                <GitFork size={13} /> fork
+              </span>
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      <footer className="start-footer">
+        <span>built locally · the studio runs in your browser, your director keys never leave it</span>
+        <a href="https://github.com/syfpsy/termin" target="_blank" rel="noreferrer">
+          github.com/syfpsy/termin
+        </a>
+      </footer>
+    </section>
+  );
+}
+
+export function DocsSurface() {
+  return (
+    <section className="surface docs-surface">
+      <Panel title="DOCS" flags=".me · bundle · player" flush>
+        <div className="docs-layout">
+          <nav className="docs-toc" aria-label="Documentation sections">
+            <a href="#docs-syntax">.me syntax</a>
+            <a href="#docs-bundle">bundle schema</a>
+            <a href="#docs-player">web player</a>
+            <a href="#docs-keyframes">keyframes</a>
+            <a href="#docs-audio">audio</a>
+            <a href="#docs-shortcuts">shortcuts</a>
+          </nav>
+          <article className="docs-body">
+            <section id="docs-syntax">
+              <Phos size={28} as="h2">.me syntax</Phos>
+              <p>
+                A scene is a plain text file with one declarative line per event, a header for the scene name and
+                duration, and optional comments / markers / property animations.
+              </p>
+              <pre className="docs-code">{`scene boot_sequence_v3 2.4s
+# three status OKs stagger in
+at 0ms    type "[OK] phosphor buffer - 240x67 cells" slowly
+at 400ms  type "[OK] palette loaded - 6 tones"
+at 800ms  type "[OK] clock locked - 30 Hz"
+
+# warming + reveal
+at 1200ms pulse "[..] warming phosphor" amber 600ms
+at 2000ms glitch "SYSTEM READY" 80ms burst
+at 2080ms reveal "> SYSTEM READY"
+at 2080ms cursor "_" blink 500ms`}</pre>
+              <h3>line types</h3>
+              <ul className="docs-list">
+                <li><code>scene &lt;name&gt; &lt;duration&gt;</code> — required header. Duration in <code>ms</code> or <code>s</code>.</li>
+                <li><code>at &lt;time&gt; &lt;effect&gt; "&lt;target&gt;" &lt;modifiers&gt;</code> — one event.</li>
+                <li><code>mark "&lt;name&gt;" &lt;time&gt;</code> — timeline annotation.</li>
+                <li><code>prop &lt;name&gt; &lt;time&gt; &lt;value&gt; [&lt;easing&gt;] ...</code> — keyframe animation on an appearance property.</li>
+                <li><code># comment</code> — ignored by the engine, preserved through edits.</li>
+              </ul>
+              <h3>effects</h3>
+              <p className="surface-copy">
+                <code>type</code>, <code>cursor</code>, <code>scan-line</code>, <code>glitch</code>,
+                <code> pulse</code>, <code>decay-trail</code>, <code>dither</code>, <code>wave</code>,
+                <code> wipe</code>, <code>loop</code>, <code>shake</code>, <code>flash</code>, <code>reveal</code>.
+                See the Effects surface for parameter details.
+              </p>
+              <h3>flags</h3>
+              <p className="surface-copy">
+                Drop <code>muted</code>, <code>solo</code>, or <code>locked</code> anywhere in modifiers. Muted
+                events skip rendering; solo isolates one or more events when at least one is set; locked prevents
+                drag / resize in the editor.
+              </p>
+            </section>
+
+            <section id="docs-bundle">
+              <Phos size={28} as="h2">bundle schema</Phos>
+              <p>
+                Exports use a versioned JSON contract: <code>phosphor.bundle.v1</code> with MIME type{' '}
+                <code>application/vnd.phosphor.bundle+json</code>. The bundle keeps both the editable
+                <code> scene.source</code> and a compiled <code>scene.events</code> array so device runtimes
+                that can't parse the DSL can still play the scene.
+              </p>
+              <pre className="docs-code">{`{
+  "schema": "phosphor.bundle.v1",
+  "schemaVersion": 1,
+  "createdAt": "2026-04-25T...",
+  "runtime": { "engine": "phosphor", "engineVersion": "0.1.0", "minPlayerVersion": "0.1.0" },
+  "scene": {
+    "name": "boot_sequence_v3",
+    "source": "scene boot_sequence_v3 2.4s\\nat 0ms type ...",
+    "durationMs": 2880,
+    "tickRate": 30,
+    "grid": { "cols": 96, "rows": 36 },
+    "loop": { "startMs": 0, "endMs": 2880 },
+    "events": [{ "atMs": 0, "effect": "type", "target": "[OK] ...", ... }],
+    "animations": [{ "property": "bloom", "keyframes": [...] }]
+  },
+  "appearance": { "decay": 240, "bloom": 1.8, ... },
+  "compatibility": { "deterministic": true, "portableRenderer": "canvas" }
+}`}</pre>
+              <p className="surface-copy">
+                Validators are forward-compatible: unknown top-level fields are dropped, unknown
+                <code> appearance</code> values clamp to their range, and any <code>schemaVersion</code> other
+                than <code>1</code> is rejected with a specific error.
+              </p>
+              <p>
+                Schema URL: <code>/schemas/phosphor.bundle.v1.schema.json</code>.
+              </p>
+            </section>
+
+            <section id="docs-player">
+              <Phos size={28} as="h2">web player</Phos>
+              <p>
+                Drop <code>&lt;phosphor-player&gt;</code> into any HTML page. The 28 kB single-file build at{' '}
+                <code>/phosphor-player.js</code> is a non-React custom element with no external runtime
+                dependencies.
+              </p>
+              <pre className="docs-code">{`<!-- Reference + bundle by URL -->
+<script type="module" src="/phosphor-player.js"></script>
+<phosphor-player src="/scene.phosphor.json"></phosphor-player>
+
+<!-- Or inline the bundle -->
+<phosphor-player>
+  <script type="application/vnd.phosphor.bundle+json">
+    { "schema": "phosphor.bundle.v1", "...": "..." }
+  </script>
+</phosphor-player>`}</pre>
+              <p className="surface-copy">
+                The Export surface generates copy-paste snippets for Web Components, React, Vue, Svelte, an
+                iframe pointing at a hosted loop URL, or just the URL itself.
+              </p>
+              <p>
+                Live demo: <a href="/examples/web-player/">/examples/web-player/</a>
+              </p>
+            </section>
+
+            <section id="docs-keyframes">
+              <Phos size={28} as="h2">keyframes</Phos>
+              <p>
+                Seven Appearance properties animate over the scene: <code>decay</code>, <code>bloom</code>,
+                <code> scanlines</code>, <code>curvature</code>, <code>flicker</code>, <code>chromatic</code>,
+                <code> sizeScale</code>. Each keyframe has a time, value, and optional easing on the segment
+                ending at it.
+              </p>
+              <pre className="docs-code">{`prop bloom 0ms 1.0 600ms 2.5 ease-out 1200ms 0.8
+prop decay 0ms 240 1500ms 600 ease-in-out`}</pre>
+              <p className="surface-copy">
+                Easings: <code>linear</code> (default), <code>ease-in</code>, <code>ease-out</code>,
+                <code> ease-in-out</code>, <code>hold</code>. Click the ◆ next to any appearance slider to drop a
+                keyframe at the playhead with the current value.
+              </p>
+            </section>
+
+            <section id="docs-audio">
+              <Phos size={28} as="h2">audio</Phos>
+              <p>
+                Append <code>sound:&lt;preset&gt;</code> to any event's modifiers to fire a synth voice when the
+                event hits during playback.
+              </p>
+              <pre className="docs-code">{`at 1200ms pulse "warming" amber 600ms sound:beep-high
+at 2000ms glitch "SYSTEM READY" 80ms burst sound:click`}</pre>
+              <p className="surface-copy">
+                Presets: <code>beep-low</code>, <code>beep-high</code>, <code>click</code>, <code>blip</code>,{' '}
+                <code>swish</code>, <code>chime</code>. The transport's sound button mutes / unmutes globally.
+                Audio only fires during real playback — scrubbing and replay are silent.
+              </p>
+            </section>
+
+            <section id="docs-shortcuts">
+              <Phos size={28} as="h2">keyboard</Phos>
+              <p>
+                Press <kbd>?</kbd> anywhere to toggle the cheat sheet. Highlights:
+              </p>
+              <ul className="docs-list">
+                <li><kbd>⌘ z</kbd> / <kbd>⌘ shift z</kbd> — undo / redo</li>
+                <li><kbd>⌘ a</kbd> — select all events</li>
+                <li><kbd>⌘ c</kbd> / <kbd>⌘ x</kbd> / <kbd>⌘ v</kbd> — copy / cut / paste at playhead</li>
+                <li><kbd>⌘ shift d</kbd> — split selected event at playhead</li>
+                <li><kbd>m</kbd> — drop a marker at the playhead</li>
+                <li><kbd>,</kbd> / <kbd>.</kbd> — step the transport ± 1 frame</li>
+                <li><kbd>delete</kbd> — remove selected events (rippling if ripple is on)</li>
+              </ul>
+            </section>
+          </article>
+        </div>
+      </Panel>
     </section>
   );
 }
@@ -233,8 +469,261 @@ export function ExportSurface({ dsl, scene, appearance, jobs, onCreateJob }: Sha
           </div>
         </div>
       </Panel>
+      <EmbedCodeGenerator dsl={dsl} scene={scene} appearance={appearance} />
     </section>
   );
+}
+
+type SnippetKind = 'web-component' | 'react' | 'vue' | 'svelte' | 'iframe' | 'loop-url';
+
+const SNIPPET_OPTIONS: Array<{ value: SnippetKind; label: string; note: string }> = [
+  { value: 'web-component', label: 'web component', note: 'Drop-in <phosphor-player>. Plain HTML, framework-free.' },
+  { value: 'iframe', label: 'iframe', note: 'Embed via /play.html#play=... — works in any CMS that allows iframes.' },
+  { value: 'loop-url', label: 'shareable url', note: 'Plain link to /play.html — paste in chat, social, README.' },
+  { value: 'react', label: 'react', note: 'JSX wrapper around <phosphor-player> with the bundle inline.' },
+  { value: 'vue', label: 'vue 3', note: 'Single-file component template + script setup.' },
+  { value: 'svelte', label: 'svelte', note: 'Svelte 4/5 component using onMount.' },
+];
+
+type EmbedCodeGeneratorProps = {
+  dsl: string;
+  scene: SharedSurfaceProps['scene'];
+  appearance: SharedSurfaceProps['appearance'];
+};
+
+function EmbedCodeGenerator({ dsl, scene, appearance }: EmbedCodeGeneratorProps) {
+  const [kind, setKind] = useState<SnippetKind>('web-component');
+  const [origin, setOrigin] = useState(() =>
+    typeof window !== 'undefined' ? window.location.origin : 'https://termin-peach.vercel.app',
+  );
+  const [loopUrl, setLoopUrl] = useState<LoopUrlResult | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const snippet = useMemo(
+    () => buildEmbedSnippet(kind, { dsl, sceneName: scene.name, appearance, origin, loopUrl }),
+    [kind, dsl, scene.name, appearance, origin, loopUrl],
+  );
+
+  async function regenerateLoopUrl() {
+    const result = await buildLoopUrl({ sceneName: scene.name, dsl, appearance, origin });
+    setLoopUrl(result);
+  }
+
+  async function copySnippet() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore — user can select-and-copy manually
+    }
+  }
+
+  const needsLoopUrl = kind === 'iframe' || kind === 'loop-url';
+
+  return (
+    <Panel title="EMBED" flags="copy-paste integration" dense>
+      <div className="embed-code">
+        <div className="embed-code__row">
+          <Label>format</Label>
+          <Segmented<SnippetKind>
+            value={kind}
+            onChange={setKind}
+            options={SNIPPET_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          />
+        </div>
+        <p className="surface-copy">{SNIPPET_OPTIONS.find((option) => option.value === kind)?.note}</p>
+        <div className="embed-code__row">
+          <Label>host origin</Label>
+          <input
+            className="embed-code__origin"
+            type="text"
+            value={origin}
+            spellCheck={false}
+            onChange={(event) => setOrigin(event.target.value)}
+            placeholder="https://your-site.com"
+          />
+        </div>
+        {needsLoopUrl && (
+          <div className="embed-code__row">
+            <Label>loop url</Label>
+            <Button icon={<Link2 size={12} />} onClick={() => void regenerateLoopUrl()}>
+              {loopUrl ? 'regenerate' : 'generate'}
+            </Button>
+            {loopUrl && (
+              <span className="embed-code__hint">
+                {(loopUrl.encodedLength / 1024).toFixed(1)} kB · {loopUrl.compressed ? 'gzip' : 'raw'}
+              </span>
+            )}
+          </div>
+        )}
+        <pre className="embed-code__snippet" aria-label={`${kind} embed snippet`}>
+          {snippet}
+        </pre>
+        <div className="embed-code__actions">
+          <Button tone="prim" icon={<Copy size={12} />} onClick={() => void copySnippet()}>
+            {copied ? 'copied' : 'copy snippet'}
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function buildEmbedSnippet(
+  kind: SnippetKind,
+  ctx: { dsl: string; sceneName: string; appearance: SharedSurfaceProps['appearance']; origin: string; loopUrl: LoopUrlResult | null },
+): string {
+  const playerSrc = `${ctx.origin.replace(/\/$/, '')}/phosphor-player.js`;
+  const inlineBundle = JSON.stringify(
+    {
+      sceneName: ctx.sceneName,
+      durationMs: 'TODO',
+      note: 'Generated by Phosphor — fork at termin-peach.vercel.app',
+    },
+    null,
+    2,
+  );
+  void inlineBundle;
+  const safeDsl = escapeForScript(ctx.dsl);
+
+  switch (kind) {
+    case 'web-component':
+      return `<!-- Drop into any HTML page. -->
+<script type="module" src="${playerSrc}"></script>
+<phosphor-player>
+  <script type="application/vnd.phosphor.bundle+json">
+${indentJsonBlock(buildClientBundleJson(ctx.sceneName, ctx.dsl, ctx.appearance))}
+  </script>
+</phosphor-player>`;
+
+    case 'iframe':
+      if (!ctx.loopUrl) {
+        return `<!-- Click "generate" above to produce a loop URL, then this iframe will use it. -->
+<iframe
+  src="${ctx.origin.replace(/\/$/, '')}/play.html"
+  width="960"
+  height="540"
+  style="border:0"
+></iframe>`;
+      }
+      return `<iframe
+  src="${ctx.loopUrl.url}"
+  width="960"
+  height="540"
+  style="border:0"
+  allow="autoplay"
+  loading="lazy"
+></iframe>`;
+
+    case 'loop-url':
+      return ctx.loopUrl?.url ?? '(click "generate" above to produce a loop URL)';
+
+    case 'react':
+      return `// React component — pairs with <script type="module" src="/phosphor-player.js"> in your <head>.
+import { useEffect, useRef } from 'react';
+
+const SCENE = ${JSON.stringify(ctx.dsl)};
+
+export function ${toComponentName(ctx.sceneName)}() {
+  const ref = useRef<HTMLScriptElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.textContent = JSON.stringify({
+      schema: 'phosphor.bundle.v1',
+      schemaVersion: 1,
+      scene: { name: '${ctx.sceneName}', source: SCENE },
+      appearance: ${JSON.stringify(ctx.appearance)},
+    });
+  }, []);
+  return (
+    <phosphor-player>
+      <script ref={ref} type="application/vnd.phosphor.bundle+json" />
+    </phosphor-player>
+  );
+}`;
+
+    case 'vue':
+      return `<!-- Vue 3 single-file component. Add <script type="module" src="/phosphor-player.js"> to index.html. -->
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+const inlineRef = ref<HTMLScriptElement | null>(null);
+const SCENE = ${JSON.stringify(ctx.dsl)};
+onMounted(() => {
+  if (inlineRef.value) inlineRef.value.textContent = JSON.stringify({
+    schema: 'phosphor.bundle.v1',
+    schemaVersion: 1,
+    scene: { name: '${ctx.sceneName}', source: SCENE },
+    appearance: ${JSON.stringify(ctx.appearance)},
+  });
+});
+</script>
+
+<template>
+  <phosphor-player>
+    <script ref="inlineRef" type="application/vnd.phosphor.bundle+json"></script>
+  </phosphor-player>
+</template>`;
+
+    case 'svelte':
+      return `<!-- Svelte component. Add <script type="module" src="/phosphor-player.js"> to app.html. -->
+<script lang="ts">
+  import { onMount } from 'svelte';
+  let inlineEl: HTMLScriptElement;
+  const SCENE = ${JSON.stringify(ctx.dsl)};
+  onMount(() => {
+    inlineEl.textContent = JSON.stringify({
+      schema: 'phosphor.bundle.v1',
+      schemaVersion: 1,
+      scene: { name: '${ctx.sceneName}', source: SCENE },
+      appearance: ${JSON.stringify(ctx.appearance)},
+    });
+  });
+</script>
+
+<phosphor-player>
+  <script bind:this={inlineEl} type="application/vnd.phosphor.bundle+json"></script>
+</phosphor-player>`;
+
+    default:
+      void safeDsl;
+      return '';
+  }
+}
+
+function buildClientBundleJson(sceneName: string, dsl: string, appearance: SharedSurfaceProps['appearance']): string {
+  return JSON.stringify(
+    {
+      schema: 'phosphor.bundle.v1',
+      schemaVersion: 1,
+      scene: { name: sceneName, source: dsl },
+      appearance,
+    },
+    null,
+    2,
+  );
+}
+
+function indentJsonBlock(json: string, indent = 4): string {
+  const pad = ' '.repeat(indent);
+  return json
+    .split('\n')
+    .map((line) => `${pad}${line}`)
+    .join('\n');
+}
+
+function toComponentName(value: string): string {
+  const cleaned = value
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join('');
+  return cleaned ? `Phosphor${cleaned}` : 'PhosphorScene';
+}
+
+function escapeForScript(value: string): string {
+  return value.replace(/<\/(script)/gi, '<\\/$1');
 }
 
 export function SettingsSurface({
