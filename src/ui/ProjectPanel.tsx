@@ -1,4 +1,4 @@
-import { Copy, Plus, Trash2 } from 'lucide-react';
+import { Copy, Download, FolderOpen, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { Project, ProjectScene, SceneId } from '../state/projectSchema';
 import { Button, Panel } from './components';
@@ -11,6 +11,8 @@ type ProjectPanelProps = {
   onDuplicateScene: (id: SceneId) => void;
   onDeleteScene: (id: SceneId) => void;
   onRenameProject: (name: string) => void;
+  onSaveProject?: () => void;
+  onOpenProject?: () => void;
 };
 
 export function ProjectPanel({
@@ -21,6 +23,8 @@ export function ProjectPanel({
   onDuplicateScene,
   onDeleteScene,
   onRenameProject,
+  onSaveProject,
+  onOpenProject,
 }: ProjectPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState(false);
@@ -34,12 +38,30 @@ export function ProjectPanel({
       dense
       flush
       tools={
-        <Button
-          aria-label="Add scene"
-          icon={<Plus size={12} />}
-          onClick={onAddScene}
-          title="Add a new scene to this project"
-        />
+        <>
+          {onOpenProject && (
+            <Button
+              aria-label="Open project"
+              icon={<FolderOpen size={12} />}
+              onClick={onOpenProject}
+              title="Open a .phosphor.proj file"
+            />
+          )}
+          {onSaveProject && (
+            <Button
+              aria-label="Save project"
+              icon={<Download size={12} />}
+              onClick={onSaveProject}
+              title="Download the project as .phosphor.proj"
+            />
+          )}
+          <Button
+            aria-label="Add scene"
+            icon={<Plus size={12} />}
+            onClick={onAddScene}
+            title="Add a new scene to this project"
+          />
+        </>
       }
     >
       <div className="project-panel">

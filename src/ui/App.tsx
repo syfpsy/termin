@@ -89,7 +89,8 @@ import {
   assetToEventLines,
   insertEventLinesIntoSource,
 } from '../state/assetUtils';
-import { clearLegacyState, loadOrInitActiveProject } from '../state/projectMigration';
+import { clearLegacyState, loadOrInitActiveProject, writeActiveProjectId } from '../state/projectMigration';
+import { readProjectFile, writeProjectFile, PROJECT_FILE_MIME } from '../export/projectFile';
 import { DEFAULT_DSL } from '../engine/dsl';
 import { Button, Label, Panel, Phos, Splitter } from './components';
 import { DirectorPanel } from './DirectorPanel';
@@ -540,16 +541,51 @@ export function App() {
 
   async function importScene(file: File | undefined) {
     if (!file) return;
+    setImportError(null);
+    // Project file: detect by extension. Round-tripped through ZIP+JSON.
+    if (file.name.toLowerCase().endsWith('.phosphor.proj') || file.type === 'application/vnd.phosphor.project+zip') {
+      try {
+        const buffer = new Uint8Array(await file.arrayBuffer());
+        const result = readProjectFile(buffer);
+        if (!result.ok) {
+          setImportError(result.error);
+          return;
+        }
+        const opened = result.project;
+        applyProject(opened);
+        writeActiveProjectId(opened.id);
+        const active = opened.scenes.find((s) => s.id === opened.activeSceneId) ?? opened.scenes[0];
+        if (active) {
+          setDsl(active.dsl);
+          setPreviewDsl(null);
+          setPast([]);
+          setFuture([]);
+          setSelectedEventIds(new Set());
+          setTick(0);
+        }
+        setView('author');
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : 'Project import failed.');
+      }
+      return;
+    }
     try {
       const imported = await readSceneFile(file);
       commitDsl(imported.dsl);
       if (imported.appearance) setAppearance(imported.appearance);
-      setImportError(null);
       selectOne(null);
       setTick(0);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Import failed.');
     }
+  }
+
+  function exportProjectFile() {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    const bytes = writeProjectFile(flushed).bytes;
+    const filename = writeProjectFile(flushed).filename;
+    triggerProjectDownload(bytes, filename);
   }
 
   // Save the current dsl into the active scene before mutating the project.
@@ -1176,7 +1212,7 @@ export function App() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".me,.json,application/json,application/vnd.phosphor.bundle+json,text/plain"
+          accept=".me,.json,.proj,.phosphor.proj,application/json,application/vnd.phosphor.bundle+json,application/vnd.phosphor.project+zip,text/plain"
           className="visually-hidden"
           onChange={(event) => {
             void importScene(event.currentTarget.files?.[0]);
@@ -1223,6 +1259,8 @@ export function App() {
                 onDuplicateScene={duplicateSceneById}
                 onDeleteScene={deleteSceneById}
                 onRenameProject={renameProject}
+                onSaveProject={exportProjectFile}
+                onOpenProject={() => fileInputRef.current?.click()}
               />
             )}
             {project && (
@@ -1442,6 +1480,8 @@ export function App() {
                 onDuplicateScene={duplicateSceneById}
                 onDeleteScene={deleteSceneById}
                 onRenameProject={renameProject}
+                onSaveProject={exportProjectFile}
+                onOpenProject={() => fileInputRef.current?.click()}
               />
             )}
             {project && (
@@ -1607,6 +1647,23 @@ function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function triggerProjectDownload(bytes: Uint8Array, filename: string) {
+  if (typeof window === 'undefined') return;
+  // Copy into a fresh ArrayBuffer-backed view to satisfy the BlobPart
+  // signature, which requires ArrayBuffer (not ArrayBufferLike).
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  const blob = new Blob([copy], { type: PROJECT_FILE_MIME });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function loadLayoutDim(key: string, fallback: number, min: number, max: number): number {

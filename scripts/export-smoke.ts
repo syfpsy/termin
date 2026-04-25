@@ -1030,6 +1030,84 @@ at 0ms type "{{users}}/{{ghost}}"`);
   assert.equal(restored?.assets[0].kind, 'data');
 }
 
+// .phosphor.proj round-trip
+{
+  const { writeProjectFile, readProjectFile, PROJECT_FILE_EXTENSION } = await import('../src/export/projectFile');
+  const { readStoreZip } = await import('../src/export/zipStore');
+  const {
+    addAsset: addAsset2,
+    addScene: addScene3,
+    makeEmptyProject: makeEmptyProject2,
+    DEFAULT_PALETTE,
+  } = await import('../src/state/projectSchema');
+
+  // Build a project with 2 scenes + 3 assets
+  let project = makeEmptyProject2(
+    'Round-trip Demo',
+    `scene boot 2.4s\nat 0ms type "[OK] phosphor"\nat 600ms pulse "warming" amber 600ms`,
+    'boot',
+  );
+  project = addScene3(project, { name: 'second', dsl: 'scene s 1s\nat 0ms type "y"', durationMs: 1000 });
+  project = addAsset2(project, { kind: 'text', text: 'SYSTEM ONLINE' }, 'snippet');
+  project = addAsset2(project, { kind: 'palette', tones: DEFAULT_PALETTE }, 'phos_default');
+  project = addAsset2(project, { kind: 'data', data: { users: 1247 } }, 'live_data');
+
+  // Pack
+  const written = writeProjectFile(project);
+  assert.ok(written.bytes.length > 200, 'project file is non-trivial');
+  assert.ok(written.filename.endsWith(PROJECT_FILE_EXTENSION), 'filename has correct extension');
+  assert.equal(written.mime, 'application/vnd.phosphor.project+zip');
+
+  // ZIP layer: should contain project.json + README.txt
+  const entries = readStoreZip(written.bytes);
+  assert.equal(entries.length, 2, 'project file contains exactly two entries');
+  const names = entries.map((entry) => entry.name).sort();
+  assert.deepEqual(names, ['README.txt', 'project.json']);
+
+  // Round-trip
+  const restored = readProjectFile(written.bytes);
+  assert.equal(restored.ok, true, 'round-trip succeeds');
+  if (restored.ok) {
+    assert.equal(restored.project.id, project.id, 'project id preserved');
+    assert.equal(restored.project.name, 'Round-trip Demo');
+    assert.equal(restored.project.scenes.length, 2);
+    assert.equal(restored.project.assets.length, 3);
+    assert.equal(restored.project.assets[0].kind, 'text');
+    assert.equal(restored.project.assets[1].kind, 'palette');
+    assert.equal(restored.project.assets[2].kind, 'data');
+  }
+
+  // Read failure: non-zip bytes
+  const garbage = new Uint8Array([0x47, 0x41, 0x52, 0x42, 0x41, 0x47, 0x45]); // "GARBAGE"
+  const broken = readProjectFile(garbage);
+  assert.equal(broken.ok, false, 'garbage bytes return error result');
+  if (!broken.ok) {
+    assert.ok(broken.error.length > 0, 'error message is non-empty');
+  }
+
+  // Read failure: zip without project.json
+  const { buildStoreZip } = await import('../src/export/zipStore');
+  const decoyBytes = buildStoreZip([{ name: 'other.txt', data: new TextEncoder().encode('nothing here') }]);
+  const decoy = readProjectFile(decoyBytes);
+  assert.equal(decoy.ok, false, 'zip without project.json fails');
+
+  // Read failure: zip with bad schema id
+  const badManifestBytes = buildStoreZip([
+    { name: 'project.json', data: new TextEncoder().encode(JSON.stringify({ schema: 'wrong.id', schemaVersion: 1 })) },
+  ]);
+  const badManifest = readProjectFile(badManifestBytes);
+  assert.equal(badManifest.ok, false, 'wrong schema id rejected');
+
+  // CRC corruption: flip a byte in the manifest payload region
+  const corruptedBytes = new Uint8Array(written.bytes);
+  // The manifest payload begins after the local header for project.json.
+  // Local header is at offset 0; its length is 30 + name length (12 for "project.json") = 42.
+  // Flipping byte 60 lands inside the JSON.
+  corruptedBytes[60] = corruptedBytes[60] ^ 0xff;
+  const corruptResult = readProjectFile(corruptedBytes);
+  assert.equal(corruptResult.ok, false, 'CRC mismatch surfaces a clear error');
+}
+
 console.log(
   `export smoke passed: ${bundle.scene.events.length} events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg poster ${svg.length}B / animated ${animatedSvg.length}B`,
 );
