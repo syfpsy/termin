@@ -1,5 +1,6 @@
 import { parseFirstDuration } from './dsl';
 import type { Grid } from './grid';
+import { sampleEventParam } from './keyframes';
 import type { ParsedScene, SceneEvent, ToneName } from './types';
 
 type PrimitiveContext = {
@@ -9,6 +10,8 @@ type PrimitiveContext = {
   tick: number;
   tickRate: number;
   layout: SceneLayout;
+  /** Per-event multiplier on every cell write. 1.0 means no animation override. */
+  intensityScale: number;
 };
 
 type SceneLayout = {
@@ -33,14 +36,23 @@ export function evaluateScene(scene: ParsedScene, grid: Grid, tick: number, tick
 
   grid.writeText(4, 1, `PHOSPHOR / ${scene.name}`, 'inkDim', 0.45);
 
-  const ctx: PrimitiveContext = { grid, scene, timeMs, tick, tickRate, layout };
+  const ctx: PrimitiveContext = { grid, scene, timeMs, tick, tickRate, layout, intensityScale: 1 };
   const hasSolo = scene.events.some((event) => event.flags.solo && !event.flags.muted);
   for (const event of scene.events) {
     if (timeMs < event.at) continue;
     if (event.flags.muted) continue;
     if (hasSolo && !event.flags.solo) continue;
+    ctx.intensityScale = sampleEventParam(scene.animations, event.line, 'intensity', timeMs, 1);
     applyPrimitive(event, ctx);
   }
+  ctx.intensityScale = 1;
+}
+
+/** Clamp + scale an intensity value by the active per-event multiplier. */
+function scaled(intensity: number, ctx: PrimitiveContext): number {
+  const value = intensity * ctx.intensityScale;
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
 }
 
 function applyPrimitive(event: SceneEvent, ctx: PrimitiveContext) {
@@ -96,7 +108,7 @@ function drawType(event: SceneEvent, ctx: PrimitiveContext) {
   const ticksPerChar = event.modifiers.includes('slowly') ? 2 : 1;
   const visible = Math.min(event.target.length, Math.floor(elapsedTicks / ticksPerChar) + 1);
   const text = event.target.slice(0, visible);
-  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), text, toneForEvent(event), 1);
+  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), text, toneForEvent(event), scaled(1, ctx));
 }
 
 function drawPulse(event: SceneEvent, ctx: PrimitiveContext) {
@@ -105,7 +117,7 @@ function drawPulse(event: SceneEvent, ctx: PrimitiveContext) {
   if (elapsed > duration) return;
   const phase = Math.max(0, Math.min(1, elapsed / duration));
   const intensity = Math.sin(phase * Math.PI);
-  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), event.target, toneForEvent(event), intensity);
+  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), event.target, toneForEvent(event), scaled(intensity, ctx));
 }
 
 function drawGlitch(event: SceneEvent, ctx: PrimitiveContext) {
@@ -120,7 +132,7 @@ function drawGlitch(event: SceneEvent, ctx: PrimitiveContext) {
   });
 
   const row = rowForEvent(event, ctx.layout);
-  ctx.grid.writeText(ctx.layout.x, row, chars.join(''), 'magenta', 1);
+  ctx.grid.writeText(ctx.layout.x, row, chars.join(''), 'magenta', scaled(1, ctx));
 
   const burstCells = 18;
   for (let i = 0; i < burstCells; i += 1) {
@@ -128,12 +140,12 @@ function drawGlitch(event: SceneEvent, ctx: PrimitiveContext) {
     const r = Math.max(3, Math.min(ctx.grid.rows - 2, row + Math.floor(rng() * 9) - 4));
     const ch = GLITCH_CHARS[Math.floor(rng() * GLITCH_CHARS.length)];
     const tone: ToneName = rng() > 0.6 ? 'cyan' : rng() > 0.35 ? 'magenta' : 'red';
-    ctx.grid.set(c, r, ch, tone, 0.45 + rng() * 0.55);
+    ctx.grid.set(c, r, ch, tone, scaled(0.45 + rng() * 0.55, ctx));
   }
 }
 
 function drawReveal(event: SceneEvent, ctx: PrimitiveContext) {
-  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), event.target, toneForEvent(event), 1);
+  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), event.target, toneForEvent(event), scaled(1, ctx));
 }
 
 function drawCursor(event: SceneEvent, ctx: PrimitiveContext) {
@@ -145,7 +157,7 @@ function drawCursor(event: SceneEvent, ctx: PrimitiveContext) {
   const row = ctx.layout.fallbackCursorRow;
   const relatedText = lastVisibleTargetBefore(ctx.scene, event.at);
   const c = ctx.layout.x + Math.min(relatedText.length + 1, ctx.grid.cols - ctx.layout.x - 2);
-  ctx.grid.set(c, row, event.target || '_', 'ink', 1);
+  ctx.grid.set(c, row, event.target || '_', 'ink', scaled(1, ctx));
 }
 
 function drawScanLine(event: SceneEvent, ctx: PrimitiveContext) {
@@ -157,8 +169,8 @@ function drawScanLine(event: SceneEvent, ctx: PrimitiveContext) {
   const row = explicitRow ? Number(explicitRow) : Math.floor(progress * (ctx.grid.rows - 1));
   for (let c = 0; c < ctx.grid.cols; c += 1) {
     const char = c % 2 === 0 ? '─' : ' ';
-    ctx.grid.set(c, row, char, 'cyan', 0.95);
-    if (row > 0) ctx.grid.set(c, row - 1, char, 'cyan', 0.2);
+    ctx.grid.set(c, row, char, 'cyan', scaled(0.95, ctx));
+    if (row > 0) ctx.grid.set(c, row - 1, char, 'cyan', scaled(0.2, ctx));
   }
 }
 
@@ -170,7 +182,7 @@ function drawDecayTrail(event: SceneEvent, ctx: PrimitiveContext) {
   const index = Math.min(points.length - 1, Math.floor(elapsed / stepMs));
   if (elapsed > points.length * stepMs) return;
   const point = points[index];
-  ctx.grid.set(point.x, point.y, event.target || '*', toneForEvent(event), 1);
+  ctx.grid.set(point.x, point.y, event.target || '*', toneForEvent(event), scaled(1, ctx));
 }
 
 function drawDither(event: SceneEvent, ctx: PrimitiveContext) {
@@ -186,7 +198,7 @@ function drawDither(event: SceneEvent, ctx: PrimitiveContext) {
       const threshold = (DITHER_PATTERN[y % 4][x % 4] + 1) / 17;
       if (threshold <= progress) {
         const char = threshold > 0.75 ? '█' : threshold > 0.5 ? '▓' : threshold > 0.25 ? '▒' : '░';
-        ctx.grid.set(ctx.layout.x + x, yStart + y, char, 'phos', 0.35 + progress * 0.65);
+        ctx.grid.set(ctx.layout.x + x, yStart + y, char, 'phos', scaled(0.35 + progress * 0.65, ctx));
       }
     }
   }
@@ -201,7 +213,7 @@ function drawWave(event: SceneEvent, ctx: PrimitiveContext) {
   const row = rowForEvent(event, ctx.layout);
   for (let i = 0; i < text.length; i += 1) {
     const y = row + Math.round(Math.sin(phase + i * 0.45) * 2);
-    ctx.grid.set(ctx.layout.x + i, y, text[i], 'cyan', 0.85);
+    ctx.grid.set(ctx.layout.x + i, y, text[i], 'cyan', scaled(0.85, ctx));
   }
 }
 
@@ -214,7 +226,7 @@ function drawWipe(event: SceneEvent, ctx: PrimitiveContext) {
   const text = event.target || 'WIPE';
   for (let i = 0; i < text.length; i += 1) {
     const distance = (i + row * 0.35) / (text.length + ctx.grid.rows * 0.35);
-    if (distance <= progress) ctx.grid.set(ctx.layout.x + i, row, text[i], toneForEvent(event), 1);
+    if (distance <= progress) ctx.grid.set(ctx.layout.x + i, row, text[i], toneForEvent(event), scaled(1, ctx));
   }
 }
 
@@ -224,7 +236,7 @@ function drawLoop(event: SceneEvent, ctx: PrimitiveContext) {
   const frames = ['◢◣', '◣◤', '◤◥', '◥◢'];
   const frame = frames[Math.floor(phase * frames.length) % frames.length];
   const text = event.target || `${frame.repeat(10)} LOOP ${frame.repeat(10)}`;
-  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), text, 'green', 0.7 + Math.sin(phase * Math.PI * 2) * 0.25);
+  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), text, 'green', scaled(0.7 + Math.sin(phase * Math.PI * 2) * 0.25, ctx));
 }
 
 function drawShake(event: SceneEvent, ctx: PrimitiveContext) {
@@ -235,7 +247,7 @@ function drawShake(event: SceneEvent, ctx: PrimitiveContext) {
   const amount = Number(event.modifiers.match(/(\d+)px/)?.[1] ?? 3);
   const row = rowForEvent(event, ctx.layout);
   const offset = Math.round((rng() * 2 - 1) * amount);
-  ctx.grid.writeText(Math.max(0, ctx.layout.x + offset), row, event.target || 'SHAKE', 'red', 1);
+  ctx.grid.writeText(Math.max(0, ctx.layout.x + offset), row, event.target || 'SHAKE', 'red', scaled(1, ctx));
 }
 
 function drawFlash(event: SceneEvent, ctx: PrimitiveContext) {
@@ -245,14 +257,14 @@ function drawFlash(event: SceneEvent, ctx: PrimitiveContext) {
   const intensity = 1 - elapsed / duration;
   for (let r = 0; r < ctx.grid.rows; r += 1) {
     for (let c = 0; c < ctx.grid.cols; c += 1) {
-      if ((c + r) % 5 === 0) ctx.grid.set(c, r, ' ', 'phos', intensity * 0.35);
+      if ((c + r) % 5 === 0) ctx.grid.set(c, r, ' ', 'phos', scaled(intensity * 0.35, ctx));
     }
   }
 }
 
 function drawUnknown(event: SceneEvent, ctx: PrimitiveContext) {
   const label = `${event.effect} ${event.target}`.trim();
-  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), label, 'inkDim', 0.65);
+  ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), label, 'inkDim', scaled(0.65, ctx));
 }
 
 function buildLayout(scene: ParsedScene, rows: number): SceneLayout {

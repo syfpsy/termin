@@ -84,7 +84,7 @@ export function sampleAppearance(
   if (animations.length === 0) return base;
   const next: Appearance = { ...base };
   for (const prop of ANIMATABLE_APPEARANCE_PROPS) {
-    const animation = animations.find((entry) => entry.property === prop);
+    const animation = animations.find((entry) => entry.eventLine === null && entry.property === prop);
     if (!animation) continue;
     const sampled = clampAnimatedValue(prop, sampleAnimation(animation, atMs));
     (next[prop] as number) = sampled;
@@ -92,12 +92,42 @@ export function sampleAppearance(
   return next;
 }
 
+/**
+ * Sample a per-event parameter at `atMs`. Returns `fallback` when no animation
+ * targets this event/param pair. Time inside the animation is interpreted in
+ * absolute scene-time (same coordinate system as the keyframes).
+ */
+export function sampleEventParam(
+  animations: PropertyAnimation[],
+  eventLine: number,
+  param: string,
+  atMs: number,
+  fallback: number,
+): number {
+  if (animations.length === 0) return fallback;
+  const animation = animations.find(
+    (entry) => entry.eventLine === eventLine && entry.property === param,
+  );
+  if (!animation) return fallback;
+  const sampled = sampleAnimation(animation, atMs);
+  if (param === 'intensity') return Math.max(0, Math.min(1, sampled));
+  return sampled;
+}
+
 export function sampleSceneAppearance(scene: ParsedScene, base: Appearance, atMs: number): Appearance {
   return sampleAppearance(scene.animations, base, atMs);
 }
 
-export function formatPropertyLine(animation: Pick<PropertyAnimation, 'property' | 'keyframes'>): string {
-  const parts: string[] = ['prop', animation.property];
+export function formatPropertyLine(
+  animation: Pick<PropertyAnimation, 'property' | 'keyframes'> & { eventLine?: number | null },
+): string {
+  const parts: string[] = ['prop'];
+  if (animation.eventLine != null) {
+    parts.push(`event-${animation.eventLine}`);
+    parts.push(animation.property);
+  } else {
+    parts.push(animation.property);
+  }
   for (const frame of animation.keyframes) {
     parts.push(`${Math.round(frame.at)}ms`);
     parts.push(formatKeyframeValue(frame.value));

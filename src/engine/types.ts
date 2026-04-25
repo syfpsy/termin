@@ -104,10 +104,14 @@ export type AnimatableAppearanceProp =
   | 'chromatic'
   | 'sizeScale';
 
+export type AnimatableEventParam = 'intensity';
+
 export type PropertyAnimation = {
   id: string;
   line: number;
-  property: AnimatableAppearanceProp;
+  property: AnimatableAppearanceProp | AnimatableEventParam;
+  /** When non-null, this animation targets a specific event (by source line number). */
+  eventLine: number | null;
   keyframes: PropertyKeyframe[];
   raw: string;
 };
@@ -122,8 +126,14 @@ export const ANIMATABLE_APPEARANCE_PROPS: AnimatableAppearanceProp[] = [
   'sizeScale',
 ];
 
+export const ANIMATABLE_EVENT_PARAMS: AnimatableEventParam[] = ['intensity'];
+
 export function isAnimatableAppearanceProp(name: string): name is AnimatableAppearanceProp {
   return (ANIMATABLE_APPEARANCE_PROPS as string[]).includes(name);
+}
+
+export function isAnimatableEventParam(name: string): name is AnimatableEventParam {
+  return (ANIMATABLE_EVENT_PARAMS as string[]).includes(name);
 }
 
 export type ParsedLine =

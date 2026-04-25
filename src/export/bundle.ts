@@ -2,6 +2,7 @@ import { estimateEventDuration, eventTone, parseScene } from '../engine/dsl';
 import {
   DEFAULT_APPEARANCE,
   type AnimatableAppearanceProp,
+  type AnimatableEventParam,
   type Appearance,
   type EasingKind,
   type ParsedScene,
@@ -33,7 +34,9 @@ export type PhosphorCompiledKeyframe = {
 
 export type PhosphorCompiledAnimation = {
   id: string;
-  property: AnimatableAppearanceProp;
+  property: AnimatableAppearanceProp | AnimatableEventParam;
+  /** Source line of the event this animation targets, or null for scene-level. */
+  eventLine: number | null;
   keyframes: PhosphorCompiledKeyframe[];
 };
 
@@ -247,6 +250,7 @@ function compileAnimations(scene: ParsedScene): PhosphorCompiledAnimation[] {
   return scene.animations.map((animation) => ({
     id: animation.id,
     property: animation.property,
+    eventLine: animation.eventLine,
     keyframes: animation.keyframes.map((frame) => ({
       atMs: frame.at,
       value: frame.value,

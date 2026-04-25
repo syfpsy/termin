@@ -1,6 +1,8 @@
 import {
   isAnimatableAppearanceProp,
+  isAnimatableEventParam,
   type AnimatableAppearanceProp,
+  type AnimatableEventParam,
   type EasingKind,
   type EventFlags,
   type ParsedLine,
@@ -66,33 +68,13 @@ export function parseScene(source: string): ParsedScene {
 
     const propMatch = trimmed.match(PROP_RE);
     if (propMatch) {
-      const property = propMatch[1];
-      if (!isAnimatableAppearanceProp(property)) {
-        parsedLines.push({
-          kind: 'invalid',
-          number,
-          raw,
-          error: `Unknown animatable property: ${property}`,
-        });
+      const target = propMatch[1];
+      const rest = propMatch[2];
+      const animation = parsePropLine(target, rest, number, raw);
+      if ('error' in animation) {
+        parsedLines.push({ kind: 'invalid', number, raw, error: animation.error });
         return;
       }
-      const keyframes = parseKeyframeList(propMatch[2]);
-      if (keyframes.length === 0) {
-        parsedLines.push({
-          kind: 'invalid',
-          number,
-          raw,
-          error: 'Expected at least one <time> <value> pair after the property name.',
-        });
-        return;
-      }
-      const animation: PropertyAnimation = {
-        id: `prop-${number}-${property}`,
-        line: number,
-        property,
-        keyframes,
-        raw,
-      };
       animations.push(animation);
       parsedLines.push({ kind: 'animation', number, raw, animation });
       return;
@@ -167,6 +149,60 @@ export function parseScene(source: string): ParsedScene {
     animations,
     lines: parsedLines,
   };
+}
+
+function parsePropLine(
+  target: string,
+  rest: string,
+  lineNumber: number,
+  raw: string,
+): PropertyAnimation | { error: string } {
+  // Scene-level animation: target is an animatable appearance property.
+  if (isAnimatableAppearanceProp(target)) {
+    const keyframes = parseKeyframeList(rest);
+    if (keyframes.length === 0) {
+      return { error: 'Expected at least one <time> <value> pair after the property name.' };
+    }
+    return {
+      id: `prop-${lineNumber}-${target}`,
+      line: lineNumber,
+      property: target,
+      eventLine: null,
+      keyframes,
+      raw,
+    };
+  }
+
+  // Per-event animation: target like "event-3" with the param as the first token of `rest`.
+  const eventMatch = target.match(/^event-(\d+)$/);
+  if (eventMatch) {
+    const eventLine = Number(eventMatch[1]);
+    if (!Number.isFinite(eventLine) || eventLine <= 0) {
+      return { error: `Invalid event line: ${target}` };
+    }
+    const tokens = rest.trim().split(/\s+/).filter(Boolean);
+    const param = tokens[0];
+    if (!param) {
+      return { error: `Expected an animatable parameter after ${target}.` };
+    }
+    if (!isAnimatableEventParam(param)) {
+      return { error: `Unknown event parameter: ${param}. Available: intensity.` };
+    }
+    const keyframes = parseKeyframeList(tokens.slice(1).join(' '));
+    if (keyframes.length === 0) {
+      return { error: 'Expected at least one <time> <value> pair after the parameter name.' };
+    }
+    return {
+      id: `prop-${lineNumber}-event-${eventLine}-${param}`,
+      line: lineNumber,
+      property: param as AnimatableEventParam,
+      eventLine,
+      keyframes,
+      raw,
+    };
+  }
+
+  return { error: `Unknown animatable target: ${target}. Use an appearance property or event-<line>.` };
 }
 
 function parseKeyframeList(rest: string): PropertyKeyframe[] {

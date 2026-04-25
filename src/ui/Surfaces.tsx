@@ -284,6 +284,20 @@ prop decay 0ms 240 1500ms 600 ease-in-out`}</pre>
                 <code> ease-in-out</code>, <code>hold</code>. Click the ◆ next to any appearance slider to drop a
                 keyframe at the playhead with the current value.
               </p>
+              <h3>per-event keyframes</h3>
+              <p>
+                Animate a single event's intensity over its window with the <code>event-N</code> target.{' '}
+                <code>N</code> is the source line number of the event (visible on the timeline editor as
+                <code> line N</code>).
+              </p>
+              <pre className="docs-code">{`scene fault_alert 1.5s
+at 0ms pulse "warming" amber 800ms
+prop event-2 intensity 0ms 0.3 800ms 1.0 ease-in`}</pre>
+              <p className="surface-copy">
+                Today only <code>intensity</code> is animatable per event; it multiplies the cells that primitive
+                writes. Unknown events / params silently fall back to the static value so a renamed line never
+                breaks rendering.
+              </p>
             </section>
 
             <section id="docs-audio">

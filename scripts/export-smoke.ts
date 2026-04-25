@@ -495,6 +495,63 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
   assert.equal(empty.kept, 0);
 }
 
+// per-event property keyframes (event-targeted prop lines)
+{
+  const { sampleEventParam } = await import('../src/engine/keyframes');
+  const sourceWithEventAnim = `scene anim 1s\nat 0ms pulse "warming" amber 600ms\nprop event-2 intensity 0ms 0.3 600ms 1.0 ease-in`;
+  const parsed = parseScene(sourceWithEventAnim);
+  assert.equal(parsed.animations.length, 1, 'event-targeted prop parses');
+  const animation = parsed.animations[0];
+  assert.equal(animation.eventLine, 2, 'eventLine captured from event-2 syntax');
+  assert.equal(animation.property, 'intensity', 'param captured');
+  assert.equal(animation.keyframes.length, 2);
+
+  // sampleEventParam returns interpolated value at 0/end/middle
+  assert.equal(sampleEventParam(parsed.animations, 2, 'intensity', 0, 1), 0.3, 'at start = first keyframe');
+  assert.equal(sampleEventParam(parsed.animations, 2, 'intensity', 600, 1), 1.0, 'at end = last keyframe');
+  // ease-in pushes the midpoint below linear
+  const mid = sampleEventParam(parsed.animations, 2, 'intensity', 300, 1);
+  const linearMid = 0.3 + (1.0 - 0.3) * 0.5;
+  assert.ok(mid < linearMid, 'ease-in mid is below linear mid');
+
+  // Unknown event/param falls back
+  assert.equal(sampleEventParam(parsed.animations, 999, 'intensity', 100, 1), 1, 'unknown event line falls back');
+  assert.equal(sampleEventParam(parsed.animations, 2, 'speed', 100, 1), 1, 'unknown param falls back');
+
+  // formatPropertyLine round-trips event-targeted animation
+  const { formatPropertyLine } = await import('../src/engine/keyframes');
+  const formatted = formatPropertyLine(animation);
+  assert.ok(formatted.startsWith('prop event-2 intensity'), `format starts with event-N param: ${formatted}`);
+  const reparsed = parseScene(`scene t 1s\n${formatted}`);
+  assert.equal(reparsed.animations.length, 1, 'formatted prop event line round-trips');
+  assert.equal(reparsed.animations[0].eventLine, 2);
+  assert.equal(reparsed.animations[0].property, 'intensity');
+
+  // Unknown event param errors with a clear message
+  const bogus = parseScene(`scene t 1s\nprop event-1 zzz 0ms 0.5`);
+  assert.ok(
+    bogus.lines.some((line) => line.kind === 'invalid' && line.error.toLowerCase().includes('unknown event parameter')),
+    'unknown event parameter reports a friendly error',
+  );
+
+  // Unknown target (neither appearance nor event-N)
+  const bogusTarget = parseScene(`scene t 1s\nprop nonsense 0ms 1.0`);
+  assert.ok(
+    bogusTarget.lines.some((line) => line.kind === 'invalid' && line.error.toLowerCase().includes('unknown animatable target')),
+    'unknown animatable target reports a friendly error',
+  );
+
+  // Bundles include eventLine on compiled animations
+  const bundle = buildPhosphorBundle({
+    sceneName: 'with_event_anim',
+    dsl: sourceWithEventAnim,
+    appearance: DEFAULT_APPEARANCE,
+    createdAt: '2026-04-25T00:00:00.000Z',
+  });
+  assert.equal(bundle.scene.animations.length, 1);
+  assert.equal(bundle.scene.animations[0].eventLine, 2, 'bundle preserves eventLine');
+}
+
 // audio: sound: modifier extraction
 {
   const { eventSound, isSoundPreset, SOUND_PRESETS } = await import('../src/engine/audio');

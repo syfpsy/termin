@@ -744,8 +744,14 @@ export function Timeline(props: TimelineProps) {
                     keyframePopover?.animationId === animation.id ? keyframePopover.index : null
                   }
                   onAddKeyframe={(atMs) => {
+                    if (animation.eventLine !== null) return;
                     const sampled = sampleAnimation(animation, atMs);
-                    onUpsertKeyframe(animation.property, atMs, sampled, 'linear');
+                    onUpsertKeyframe(
+                      animation.property as AnimatableAppearanceProp,
+                      atMs,
+                      sampled,
+                      'linear',
+                    );
                   }}
                   onStartKeyframeDrag={(index, pointerEvent) => {
                     const lane = (pointerEvent.currentTarget as HTMLElement).closest(
@@ -891,7 +897,9 @@ function PropertyTrack({
   const popoverFrame = popoverIndex !== null ? animation.keyframes[popoverIndex] : null;
   return (
     <div className="timeline__prop-row" data-property={animation.property}>
-      <span className="timeline__prop-name">{animation.property}</span>
+      <span className="timeline__prop-name">
+        {animation.eventLine !== null ? `event-${animation.eventLine}.${animation.property}` : animation.property}
+      </span>
       <span className="timeline__prop-meta">{animation.keyframes.length}kf</span>
       <div
         className="timeline__prop-lane"
