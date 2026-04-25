@@ -473,7 +473,7 @@ export function Timeline(props: TimelineProps) {
         const evEnd = ev.at + inferDisplayDuration(ev, rate);
         if (evEnd < timeStart || ev.at > timeEnd) continue;
 
-        ids.push(eventId);
+        ids.push(ev.id);
       }
       const traveled =
         Math.abs(marquee.currentClientX - marquee.startClientX) > 4 ||
