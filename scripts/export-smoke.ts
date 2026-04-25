@@ -470,6 +470,26 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
   assert.equal(stripFlagsFromModifiers('amber muted 400ms locked'), 'amber 400ms');
 }
 
+// audio: sound: modifier extraction
+{
+  const { eventSound, isSoundPreset, SOUND_PRESETS } = await import('../src/engine/audio');
+  assert.equal(SOUND_PRESETS.length, 6, 'six audio presets shipped');
+  assert.equal(isSoundPreset('beep-high'), true);
+  assert.equal(isSoundPreset('made-up'), false);
+
+  const audioScene = parseScene(`scene a 1s\nat 0ms type "X" sound:beep-low\nat 200ms pulse "Y" amber sound:swish 400ms`);
+  const beep = eventSound(audioScene.events[0]);
+  const swish = eventSound(audioScene.events[1]);
+  assert.equal(beep, 'beep-low', 'first event sound preset');
+  assert.equal(swish, 'swish', 'second event sound preset');
+
+  const noSoundEvent = parseScene(`scene a 1s\nat 0ms type "X" amber`).events[0];
+  assert.equal(eventSound(noSoundEvent), null, 'event without sound: modifier returns null');
+
+  const unknownSound = parseScene(`scene a 1s\nat 0ms type "X" sound:zzz`).events[0];
+  assert.equal(eventSound(unknownSound), null, 'unknown sound name returns null instead of throwing');
+}
+
 // markers + flag-aware engine smoke
 {
   const sceneSrc = `scene mute_test 1s\nat 0ms type "A"\nat 200ms type "B" muted\nat 400ms type "C" solo\nmark "beat" 500ms`;

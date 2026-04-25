@@ -1,4 +1,4 @@
-import { Code2, Download, FileUp, Pause, Play, Redo2, RotateCcw, SkipBack, SkipForward, Undo2 } from 'lucide-react';
+import { Code2, Download, FileUp, Pause, Play, Redo2, RotateCcw, SkipBack, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   exportBundleJson,
@@ -14,6 +14,7 @@ import {
   isWebmExportSupported,
   readSceneFile,
 } from '../director/client';
+import { ensureAudioRunning, isAudioMuted, setAudioMuted, scheduleEventSounds } from '../engine/audio';
 import { TickClock } from '../engine/clock';
 import { parseScene } from '../engine/dsl';
 import {
@@ -144,6 +145,7 @@ export function App() {
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => new Set());
   const [timelineUnits, setTimelineUnits] = useState<'frame' | 'ms'>('frame');
   const [helpOpen, setHelpOpen] = useState(false);
+  const [audioMuted, setAudioMutedState] = useState(false);
   const [rippleEdit, setRippleEdit] = useState(false);
   const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
   const [onionSkin, setOnionSkin] = useState(false);
@@ -238,6 +240,10 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
+    setAudioMuted(audioMuted);
+  }, [audioMuted]);
+
+  useEffect(() => {
     const mql = window.matchMedia(VIEWPORT_LOCK_QUERY);
     const handler = (event: MediaQueryListEvent) => setViewportTooSmall(event.matches);
     mql.addEventListener('change', handler);
@@ -276,22 +282,42 @@ export function App() {
   useEffect(() => {
     clockRef.current?.stop();
     if (!playing) return;
+    if (!isAudioMuted()) void ensureAudioRunning();
     const clock = new TickClock(appearance.tickRate, (count) => {
       setTick((current) => {
+        let next: number;
         if (loopRegion) {
           const startTick = Math.floor((loopRegion.startMs / 1000) * appearance.tickRate);
           const endTick = Math.max(startTick + 1, Math.ceil((loopRegion.endMs / 1000) * appearance.tickRate));
-          if (current < startTick || current >= endTick) return startTick;
-          const span = endTick - startTick;
-          return startTick + ((current - startTick + count) % span);
+          if (current < startTick || current >= endTick) {
+            next = startTick;
+          } else {
+            const span = endTick - startTick;
+            next = startTick + ((current - startTick + count) % span);
+          }
+        } else {
+          next = (current + count) % durationTicks;
         }
-        return (current + count) % durationTicks;
+        // Schedule audio for events whose at-time falls in (current, next].
+        // Wrapping (next < current) is handled by scheduling in two halves.
+        if (!isAudioMuted() && scene.events.length > 0 && next !== current) {
+          if (next > current) {
+            scheduleEventSounds(scene.events, current, next, appearance.tickRate);
+          } else {
+            const lastTick = (loopRegion
+              ? Math.ceil((loopRegion.endMs / 1000) * appearance.tickRate)
+              : durationTicks) - 1;
+            scheduleEventSounds(scene.events, current, lastTick, appearance.tickRate);
+            scheduleEventSounds(scene.events, -1, next, appearance.tickRate);
+          }
+        }
+        return next;
       });
     });
     clockRef.current = clock;
     clock.start();
     return () => clock.stop();
-  }, [appearance.tickRate, durationTicks, loopRegion, playing]);
+  }, [appearance.tickRate, durationTicks, loopRegion, playing, scene.events]);
 
   function updateAppearance(patch: Partial<Appearance>) {
     setAppearance((current) => ({ ...current, ...patch }));
@@ -992,6 +1018,14 @@ export function App() {
               <Button icon={<RotateCcw size={14} />} active={Boolean(previewDsl)} onClick={() => setPreviewDsl(null)}>
                 commit view
               </Button>
+              <Button
+                aria-label={audioMuted ? 'Unmute scene audio' : 'Mute scene audio'}
+                icon={audioMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                active={!audioMuted}
+                onClick={() => setAudioMutedState((value) => !value)}
+              >
+                {audioMuted ? 'mute' : 'sound'}
+              </Button>
               <Phos tone="amber" size={23}>
                 {formatTime(tick, appearance.tickRate)}
               </Phos>
@@ -1275,6 +1309,14 @@ const SHORTCUT_GROUPS: Array<{ heading: string; rows: Array<[string, string]> }>
       ['click empty prop lane', 'insert keyframe at click time'],
       ['drag a diamond', 'move keyframe (snap-aware)'],
       ['click a diamond', 'edit value / easing / delete'],
+    ],
+  },
+  {
+    heading: 'audio',
+    rows: [
+      ['sound: button', 'toggle scene audio'],
+      ['add modifier', 'sound:beep-low / beep-high'],
+      ['', 'click / blip / swish / chime'],
     ],
   },
   {
