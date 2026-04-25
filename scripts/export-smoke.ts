@@ -470,6 +470,31 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
   assert.equal(stripFlagsFromModifiers('amber muted 400ms locked'), 'amber 400ms');
 }
 
+// line diff for director proposals
+{
+  const { diffLines } = await import('../src/ui/lineDiff');
+  const before = `scene a 1s\nat 0ms type "X"\nat 600ms pulse "Y" amber 400ms`;
+  const after = `scene a 1s\nat 0ms type "X"\nat 300ms glitch "Z" 80ms\nat 600ms pulse "Y" amber 400ms`;
+  const diff = diffLines(before, after);
+  assert.equal(diff.added, 1, 'added one new line');
+  assert.equal(diff.removed, 0, 'kept the rest');
+  assert.equal(diff.kept, 3, 'three lines unchanged');
+  assert.ok(
+    diff.rows.some((row) => row.kind === 'add' && row.text.includes('glitch')),
+    'add row contains the new glitch line',
+  );
+
+  const replacement = diffLines('alpha\nbeta\ngamma', 'alpha\ndelta\ngamma');
+  assert.equal(replacement.added, 1);
+  assert.equal(replacement.removed, 1);
+  assert.equal(replacement.kept, 2);
+
+  const empty = diffLines('', 'a\nb');
+  assert.equal(empty.added, 2, 'empty source -> all lines added');
+  assert.equal(empty.removed, 1, 'the lone empty source line is removed');
+  assert.equal(empty.kept, 0);
+}
+
 // audio: sound: modifier extraction
 {
   const { eventSound, isSoundPreset, SOUND_PRESETS } = await import('../src/engine/audio');

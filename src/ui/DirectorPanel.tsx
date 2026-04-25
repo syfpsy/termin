@@ -1,10 +1,11 @@
-import { Bot, Check, Eye, RefreshCw, Send, WandSparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Bot, Check, Eye, FileCode2, GitCompareArrows, RefreshCw, Send, WandSparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { requestDirector } from '../director/client';
 import type { ProviderKind } from '../engine/types';
 import { DEFAULT_MODEL_PROVIDERS, providerHasUserKey, PROVIDER_ORDER, type ModelProviderConfig } from '../state/modelProviders';
 import type { DirectorMessage, DirectorProposal } from '../state/types';
 import { Button, Panel } from './components';
+import { diffLines } from './lineDiff';
 
 type DirectorPanelProps = {
   dsl: string;
@@ -45,9 +46,15 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
     },
   ]);
   const [proposal, setProposal] = useState<DirectorProposal | null>(null);
+  const [proposalView, setProposalView] = useState<'diff' | 'full'>('diff');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
+
+  const proposalDiff = useMemo(
+    () => (proposal ? diffLines(dsl, proposal.dsl) : null),
+    [dsl, proposal],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -157,8 +164,46 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
           <div className="proposal-card">
             <div className="proposal-card__meta">
               <Bot size={13} /> proposed - {proposal.provider} / {proposal.model}
+              {proposalDiff && (
+                <span className="proposal-card__diff-stats">
+                  +{proposalDiff.added} −{proposalDiff.removed}
+                </span>
+              )}
+              <span className="proposal-card__view">
+                <button
+                  type="button"
+                  className={proposalView === 'diff' ? 'is-active' : ''}
+                  onClick={() => setProposalView('diff')}
+                  aria-pressed={proposalView === 'diff'}
+                  title="Show changes from current scene"
+                >
+                  <GitCompareArrows size={11} /> diff
+                </button>
+                <button
+                  type="button"
+                  className={proposalView === 'full' ? 'is-active' : ''}
+                  onClick={() => setProposalView('full')}
+                  aria-pressed={proposalView === 'full'}
+                  title="Show full proposed scene"
+                >
+                  <FileCode2 size={11} /> full
+                </button>
+              </span>
             </div>
-            <pre>{proposal.dsl}</pre>
+            {proposalView === 'diff' && proposalDiff ? (
+              <pre className="proposal-card__diff" aria-label="Proposed changes">
+                {proposalDiff.rows.map((row, index) => (
+                  <span key={index} className={`proposal-diff-line proposal-diff-line--${row.kind}`}>
+                    <span className="proposal-diff-line__sigil" aria-hidden="true">
+                      {row.kind === 'add' ? '+' : row.kind === 'remove' ? '−' : ' '}
+                    </span>
+                    <span className="proposal-diff-line__text">{row.text || '\u00A0'}</span>
+                  </span>
+                ))}
+              </pre>
+            ) : (
+              <pre>{proposal.dsl}</pre>
+            )}
             {proposal.notes && <small>{proposal.notes}</small>}
             <div className="proposal-card__actions">
               <Button tone="prim" icon={<Check size={13} />} onClick={() => onCommit(proposal)}>

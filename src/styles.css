@@ -730,6 +730,88 @@ input {
   flex-wrap: wrap;
 }
 
+.proposal-card__diff-stats {
+  margin-inline-start: 6px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.proposal-card__view {
+  display: inline-flex;
+  margin-inline-start: auto;
+  gap: 2px;
+}
+
+.proposal-card__view button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid var(--bezel);
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.proposal-card__view button:hover {
+  border-color: var(--bezel-hi);
+  color: var(--ink);
+}
+
+.proposal-card__view button.is-active,
+.proposal-card__view button[aria-pressed='true'] {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+  background: var(--accent-soft);
+}
+
+.proposal-card__diff {
+  display: flex;
+  flex-direction: column;
+}
+
+.proposal-diff-line {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 4px;
+  align-items: baseline;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.proposal-diff-line--add {
+  background: rgba(127, 224, 147, 0.08);
+  color: var(--green);
+}
+
+.proposal-diff-line--remove {
+  background: rgba(255, 107, 107, 0.08);
+  color: var(--red);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 107, 107, 0.5);
+}
+
+.proposal-diff-line--keep {
+  color: var(--ink-dim);
+}
+
+.proposal-diff-line__sigil {
+  text-align: center;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.proposal-diff-line__text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .director-input {
   border-top: 1px solid var(--bezel);
   background: var(--panel);
