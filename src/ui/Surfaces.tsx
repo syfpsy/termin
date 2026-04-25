@@ -34,6 +34,7 @@ type SharedSurfaceProps = {
   provider: ProviderKind;
   providerConfigs: Record<ProviderKind, ModelProviderConfig>;
   jobs: ExportJob[];
+  animatedProps?: Set<string>;
   onForkScene: (scene: LibraryScene) => void;
   onDslChange: (dsl: string) => void;
   onAppearanceChange: (patch: Partial<Appearance>) => void;
@@ -42,6 +43,7 @@ type SharedSurfaceProps = {
   onProviderConfigChange?: (config: ModelProviderConfig) => void;
   onCreateJob: (target: ExportTarget) => void;
   onOpenAuthor: () => void;
+  onAppearanceKeyframe?: (prop: 'decay' | 'bloom' | 'scanlines' | 'curvature' | 'flicker' | 'chromatic') => void;
 };
 
 const EFFECT_DETAILS = [
@@ -57,6 +59,7 @@ const EFFECT_DETAILS = [
   { name: 'loop', notation: 'at 0ms loop "<<< >>> <<< >>>"', params: ['period', 'phase', 'section'], note: 'Marks repeating material for future seamless loop authoring.' },
   { name: 'shake', notation: 'at 600ms shake "SYSTEM FAULT" 3px 200ms', params: ['amount', 'duration', 'noise'], note: 'Per-tick horizontal row tear.' },
   { name: 'flash', notation: 'at 980ms flash "screen" 80ms', params: ['duration', 'intensity', 'tone'], note: 'Whole-screen spike written into sparse cells.' },
+  { name: 'counter', notation: 'at 0ms counter "USERS: " from 0 to 1247 800ms ease-out', params: ['from', 'to', 'duration', 'easing', 'format'], note: 'Animates a number; format:k or format:pct switch the display.' },
 ];
 
 export function StartSurface({ onForkScene, onOpenAuthor }: Pick<SharedSurfaceProps, 'onForkScene' | 'onOpenAuthor'>) {
@@ -774,13 +777,17 @@ export function SettingsSurface({
   appearance,
   renderer,
   provider,
+  animatedProps,
   onAppearanceChange,
   onRendererChange,
   onProviderChange,
+  onAppearanceKeyframe,
 }: SharedSurfaceProps) {
+  const isAnimated = (prop: string) => Boolean(animatedProps?.has(prop));
+  const animateBinding = onAppearanceKeyframe;
   return (
     <section className="surface settings-surface">
-      <Panel title="SETTINGS / APPEARANCE" flags="persisted locally">
+      <Panel id="settings-appearance" title="SETTINGS / APPEARANCE" flags="persisted locally">
         <div className="settings-grid">
           <div className="settings-group">
             <Label>preview chrome</Label>
@@ -846,12 +853,78 @@ export function SettingsSurface({
             />
           </div>
           <SliderRow label="size" value={appearance.sizeScale} min={0.75} max={1.4} step={0.05} display={`${appearance.sizeScale.toFixed(2)}x`} onChange={(sizeScale) => onAppearanceChange({ sizeScale })} />
-          <SliderRow label="decay" value={appearance.decay} min={0} max={800} step={10} display={`${appearance.decay}ms`} onChange={(decay) => onAppearanceChange({ decay })} />
-          <SliderRow label="bloom" value={appearance.bloom} min={0} max={3} step={0.1} display={appearance.bloom.toFixed(1)} onChange={(bloom) => onAppearanceChange({ bloom })} />
-          <SliderRow label="scanlines" value={appearance.scanlines} min={0} max={1} step={0.05} display={appearance.scanlines.toFixed(2)} onChange={(scanlines) => onAppearanceChange({ scanlines })} />
-          <SliderRow label="curvature" value={appearance.curvature} min={0} max={1} step={0.05} display={appearance.curvature.toFixed(2)} onChange={(curvature) => onAppearanceChange({ curvature })} />
-          <SliderRow label="flicker" value={appearance.flicker} min={0} max={1} step={0.02} display={appearance.flicker.toFixed(2)} onChange={(flicker) => onAppearanceChange({ flicker })} />
-          <SliderRow label="chromatic" value={appearance.chromatic} min={0} max={1} step={0.02} display={appearance.chromatic.toFixed(2)} onChange={(chromatic) => onAppearanceChange({ chromatic })} />
+          <SliderRow
+            label="decay"
+            value={appearance.decay}
+            min={0}
+            max={800}
+            step={10}
+            display={`${appearance.decay}ms`}
+            onChange={(decay) => onAppearanceChange({ decay })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('decay')}
+            onAnimateClick={animateBinding ? () => animateBinding('decay') : undefined}
+          />
+          <SliderRow
+            label="bloom"
+            value={appearance.bloom}
+            min={0}
+            max={3}
+            step={0.1}
+            display={appearance.bloom.toFixed(1)}
+            onChange={(bloom) => onAppearanceChange({ bloom })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('bloom')}
+            onAnimateClick={animateBinding ? () => animateBinding('bloom') : undefined}
+          />
+          <SliderRow
+            label="scanlines"
+            value={appearance.scanlines}
+            min={0}
+            max={1}
+            step={0.05}
+            display={appearance.scanlines.toFixed(2)}
+            onChange={(scanlines) => onAppearanceChange({ scanlines })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('scanlines')}
+            onAnimateClick={animateBinding ? () => animateBinding('scanlines') : undefined}
+          />
+          <SliderRow
+            label="curvature"
+            value={appearance.curvature}
+            min={0}
+            max={1}
+            step={0.05}
+            display={appearance.curvature.toFixed(2)}
+            onChange={(curvature) => onAppearanceChange({ curvature })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('curvature')}
+            onAnimateClick={animateBinding ? () => animateBinding('curvature') : undefined}
+          />
+          <SliderRow
+            label="flicker"
+            value={appearance.flicker}
+            min={0}
+            max={1}
+            step={0.02}
+            display={appearance.flicker.toFixed(2)}
+            onChange={(flicker) => onAppearanceChange({ flicker })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('flicker')}
+            onAnimateClick={animateBinding ? () => animateBinding('flicker') : undefined}
+          />
+          <SliderRow
+            label="chromatic"
+            value={appearance.chromatic}
+            min={0}
+            max={1}
+            step={0.02}
+            display={appearance.chromatic.toFixed(2)}
+            onChange={(chromatic) => onAppearanceChange({ chromatic })}
+            animatable={Boolean(animateBinding)}
+            animated={isAnimated('chromatic')}
+            onAnimateClick={animateBinding ? () => animateBinding('chromatic') : undefined}
+          />
           <div className="settings-group settings-group--wide">
             <Label>tick rate</Label>
             <Segmented<TickRate>

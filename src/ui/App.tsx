@@ -74,7 +74,7 @@ import {
   touchRecentScene,
   type RecentScene,
 } from '../state/storage';
-import { Button, Label, Panel, Phos, SliderRow, Splitter } from './components';
+import { Button, Label, Panel, Phos, Splitter } from './components';
 import { DirectorPanel } from './DirectorPanel';
 import { EnginePreview } from './EnginePreview';
 import { NotationPanel } from './NotationPanel';
@@ -132,6 +132,7 @@ const EFFECTS = [
   ['loop', 'restart'],
   ['shake', 'row tear'],
   ['flash', 'screen spike'],
+  ['counter', 'roll up digits'],
 ] as const;
 
 const VIEWPORT_LOCK_QUERY = '(max-width: 759px), (max-height: 519px)';
@@ -1103,85 +1104,10 @@ export function App() {
             className="splitter--col-right"
           />
 
-          <aside className="right-stack" aria-label="Phosphor controls, library, and effects">
-            <Panel id="phosphor-controls" title="PHOSPHOR" dense>
-              <SliderRow
-                label="decay"
-                value={appearance.decay}
-                min={0}
-                max={800}
-                step={10}
-                display={`${appearance.decay}ms`}
-                onChange={(decay) => updateAppearance({ decay })}
-                animatable
-                animated={animatedProps.has('decay')}
-                onAnimateClick={() => handleAppearanceKeyframe('decay')}
-              />
-              <SliderRow
-                label="bloom"
-                value={appearance.bloom}
-                min={0}
-                max={3}
-                step={0.1}
-                display={appearance.bloom.toFixed(1)}
-                onChange={(bloom) => updateAppearance({ bloom })}
-                animatable
-                animated={animatedProps.has('bloom')}
-                onAnimateClick={() => handleAppearanceKeyframe('bloom')}
-              />
-              <SliderRow
-                label="scanlines"
-                value={appearance.scanlines}
-                min={0}
-                max={1}
-                step={0.05}
-                display={appearance.scanlines.toFixed(2)}
-                onChange={(scanlines) => updateAppearance({ scanlines })}
-                animatable
-                animated={animatedProps.has('scanlines')}
-                onAnimateClick={() => handleAppearanceKeyframe('scanlines')}
-              />
-              <SliderRow
-                label="curvature"
-                value={appearance.curvature}
-                min={0}
-                max={1}
-                step={0.05}
-                display={appearance.curvature.toFixed(2)}
-                onChange={(curvature) => updateAppearance({ curvature })}
-                animatable
-                animated={animatedProps.has('curvature')}
-                onAnimateClick={() => handleAppearanceKeyframe('curvature')}
-              />
-              <SliderRow
-                label="flicker"
-                value={appearance.flicker}
-                min={0}
-                max={1}
-                step={0.02}
-                display={appearance.flicker.toFixed(2)}
-                onChange={(flicker) => updateAppearance({ flicker })}
-                animatable
-                animated={animatedProps.has('flicker')}
-                onAnimateClick={() => handleAppearanceKeyframe('flicker')}
-              />
-              <SliderRow
-                label="chromatic"
-                value={appearance.chromatic}
-                min={0}
-                max={1}
-                step={0.02}
-                display={appearance.chromatic.toFixed(2)}
-                onChange={(chromatic) => updateAppearance({ chromatic })}
-                animatable
-                animated={animatedProps.has('chromatic')}
-                onAnimateClick={() => handleAppearanceKeyframe('chromatic')}
-              />
-            </Panel>
-
+          <aside className="right-stack" aria-label="Scene library and effects">
             <SceneLibrary onFork={forkLibraryScene} />
 
-            <Panel id="effects" title="EFFECTS" flags="12 primitives" dense flush className="effects-panel">
+            <Panel id="effects" title="EFFECTS" flags={`${EFFECTS.length} primitives`} dense flush className="effects-panel">
               {EFFECTS.map(([name, description]) => {
                 const used = scene.events.filter((event) => event.effect === name).length;
                 return (
@@ -1239,6 +1165,7 @@ export function App() {
               provider={provider}
               providerConfigs={modelProviders}
               jobs={jobs}
+              animatedProps={animatedProps}
               onForkScene={forkLibraryScene}
               onDslChange={setDsl}
               onAppearanceChange={updateAppearance}
@@ -1246,6 +1173,7 @@ export function App() {
               onProviderChange={setProvider}
               onCreateJob={createJob}
               onOpenAuthor={() => setView('author')}
+              onAppearanceKeyframe={handleAppearanceKeyframe}
             />
           )}
           {view === 'docs' && <DocsSurface />}
@@ -1444,6 +1372,7 @@ function glyphFor(name: string) {
     loop: '@',
     shake: '!',
     flash: '+',
+    counter: '0',
   };
   return glyphs[name] ?? '?';
 }
