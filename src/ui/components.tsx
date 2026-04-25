@@ -1,4 +1,4 @@
-import { createElement, useCallback, useState, type ButtonHTMLAttributes, type ElementType, type ReactNode } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ElementType, type ReactNode } from 'react';
 import type { ToneName } from '../engine/types';
 
 type PanelProps = {
@@ -112,6 +112,13 @@ type SplitterProps = {
 };
 
 export function Splitter({ orientation, onResize, onCommit, ariaLabel, className }: SplitterProps) {
+  // Keep the callbacks in refs so the drag closure always calls the latest
+  // version even if the parent re-renders mid-drag with a new function identity.
+  const onResizeRef = useRef(onResize);
+  const onCommitRef = useRef(onCommit);
+  useEffect(() => { onResizeRef.current = onResize; }, [onResize]);
+  useEffect(() => { onCommitRef.current = onCommit; }, [onCommit]);
+
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return;
@@ -126,7 +133,7 @@ export function Splitter({ orientation, onResize, onCommit, ariaLabel, className
         const current = orientation === 'vertical' ? ev.clientX : ev.clientY;
         const delta = current - last;
         if (delta !== 0) {
-          onResize(delta);
+          onResizeRef.current(delta);
           last = current;
         }
       };
@@ -136,13 +143,13 @@ export function Splitter({ orientation, onResize, onCommit, ariaLabel, className
         document.removeEventListener('pointercancel', up);
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousSelect;
-        onCommit?.();
+        onCommitRef.current?.();
       };
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
       document.addEventListener('pointercancel', up);
     },
-    [orientation, onResize, onCommit],
+    [orientation], // onResize/onCommit are accessed via ref — no longer needed in deps
   );
 
   return (

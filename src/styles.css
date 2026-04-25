@@ -621,7 +621,7 @@ input {
 .panel__chevron {
   display: inline-block;
   inline-size: 8px;
-  font-size: 8px;
+  font-size: 9px;
   color: var(--ink-muted);
   text-align: center;
   flex: 0 0 auto;
@@ -650,7 +650,7 @@ input {
 
 .panel__flags {
   color: var(--ink-muted);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.12em;
   margin-left: 3px;
 }
@@ -2596,7 +2596,7 @@ input {
 }
 
 .titlebar-menu__preface-label {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -2620,7 +2620,7 @@ input {
 
 .titlebar-menu__header {
   padding: 6px 12px 2px;
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -2694,7 +2694,7 @@ input {
 }
 
 .cloud-panel__label span {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -2745,7 +2745,7 @@ input {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-muted);

@@ -688,7 +688,15 @@ export function Timeline(props: TimelineProps) {
                 <span className="timeline__effect" data-tone={tone}>
                   {event.effect}
                 </span>
-                <div className="timeline__lane" role="presentation">
+                <div
+                  className="timeline__lane"
+                  role="presentation"
+                  onClick={(e) => {
+                    // Click on empty lane background (not on a bar) → clear selection.
+                    if ((e.target as HTMLElement).closest('.timeline__bar, .timeline__resize')) return;
+                    onSelectOne(null);
+                  }}
+                >
                   <span
                     className={`timeline__bar ${dragging ? 'timeline__bar--dragging' : ''}`}
                     data-tone={tone}
@@ -1347,11 +1355,35 @@ function EffectPicker({ atMs, onPick, onCancel }: EffectPickerProps) {
   // We listen on `pointerdown` (not `click`) so the dismissal happens before
   // any click handler on the underlying timeline can fire — otherwise opening
   // the picker and then clicking out could re-trigger an unrelated action.
+  // Tab/Shift-Tab are trapped inside the picker so focus never leaks into the
+  // underlying timeline while the dialog is open.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
         onCancel();
+        return;
+      }
+      if (event.key === 'Tab' && containerRef.current) {
+        const focusable = Array.from(
+          containerRef.current.querySelectorAll<HTMLElement>(
+            'input, button:not([disabled])',
+          ),
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey) {
+          if (document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
       }
     }
     function onPointer(event: PointerEvent) {
