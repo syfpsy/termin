@@ -1,7 +1,8 @@
-import { createElement, type ButtonHTMLAttributes, type ElementType, type ReactNode } from 'react';
+import { createElement, useCallback, useState, type ButtonHTMLAttributes, type ElementType, type ReactNode } from 'react';
 import type { ToneName } from '../engine/types';
 
 type PanelProps = {
+  id?: string;
   title?: string;
   flags?: string;
   tools?: ReactNode;
@@ -11,10 +12,13 @@ type PanelProps = {
   tone?: ToneName;
   className?: string;
   titleAs?: 'h2' | 'h3' | 'h4';
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
   children: ReactNode;
 };
 
 export function Panel({
+  id,
   title,
   flags,
   tools,
@@ -24,25 +28,132 @@ export function Panel({
   tone = 'phos',
   className,
   titleAs: TitleTag = 'h2',
+  collapsible = true,
+  defaultCollapsed = false,
   children,
 }: PanelProps) {
+  const storageKey = id ? `phosphor:panel:${id}:collapsed` : null;
+  const [collapsed, setCollapsedState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && storageKey) {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved === '1') return true;
+      if (saved === '0') return false;
+    }
+    return defaultCollapsed;
+  });
+  const toggleCollapsed = useCallback(() => {
+    setCollapsedState((current) => {
+      const next = !current;
+      if (typeof window !== 'undefined' && storageKey) {
+        window.localStorage.setItem(storageKey, next ? '1' : '0');
+      }
+      return next;
+    });
+  }, [storageKey]);
+
+  const showHeader = Boolean(title || tools);
+  const isCollapsed = collapsible && collapsed;
+  const bodyId = id ? `panel-body-${id}` : undefined;
+
+  const headerInner = (
+    <>
+      {collapsible && title && (
+        <span className="panel__chevron" aria-hidden="true">{isCollapsed ? '\u25B8' : '\u25BE'}</span>
+      )}
+      {title && <span className="panel__signal" aria-hidden="true" />}
+      {title && <TitleTag className="panel__title-text">{title}</TitleTag>}
+      {flags && <span className="panel__flags">{flags}</span>}
+    </>
+  );
+
   return (
-    <section className={`panel ${className ?? ''}`} data-tone={tone} aria-label={title}>
-      {(title || tools) && (
+    <section
+      className={`panel ${className ?? ''}`}
+      data-tone={tone}
+      aria-label={title}
+      data-collapsed={isCollapsed ? 'true' : undefined}
+    >
+      {showHeader && (
         <div className="panel__bar">
-          <div className="panel__title">
-            {title && <span className="panel__signal" aria-hidden="true" />}
-            {title && <TitleTag className="panel__title-text">{title}</TitleTag>}
-            {flags && <span className="panel__flags">{flags}</span>}
-          </div>
+          {collapsible && title ? (
+            <button
+              type="button"
+              className="panel__title panel__toggle"
+              onClick={toggleCollapsed}
+              aria-expanded={!isCollapsed}
+              aria-controls={bodyId}
+            >
+              {headerInner}
+            </button>
+          ) : (
+            <div className="panel__title">{headerInner}</div>
+          )}
           {tools && <div className="panel__tools">{tools}</div>}
         </div>
       )}
-      <div className={`panel__body ${flush ? 'panel__body--flush' : ''} ${dense ? 'panel__body--dense' : ''}`}>
+      <div
+        id={bodyId}
+        className={`panel__body ${flush ? 'panel__body--flush' : ''} ${dense ? 'panel__body--dense' : ''}`}
+        hidden={isCollapsed || undefined}
+      >
         {children}
       </div>
-      {footer && <div className="panel__footer">{footer}</div>}
+      {footer && !isCollapsed && <div className="panel__footer">{footer}</div>}
     </section>
+  );
+}
+
+type SplitterProps = {
+  orientation: 'vertical' | 'horizontal';
+  onResize: (delta: number) => void;
+  onCommit?: () => void;
+  ariaLabel: string;
+  className?: string;
+};
+
+export function Splitter({ orientation, onResize, onCommit, ariaLabel, className }: SplitterProps) {
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      let last = orientation === 'vertical' ? event.clientX : event.clientY;
+      const previousCursor = document.body.style.cursor;
+      const previousSelect = document.body.style.userSelect;
+      document.body.style.cursor = orientation === 'vertical' ? 'col-resize' : 'row-resize';
+      document.body.style.userSelect = 'none';
+
+      const move = (ev: PointerEvent) => {
+        const current = orientation === 'vertical' ? ev.clientX : ev.clientY;
+        const delta = current - last;
+        if (delta !== 0) {
+          onResize(delta);
+          last = current;
+        }
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousSelect;
+        onCommit?.();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
+    },
+    [orientation, onResize, onCommit],
+  );
+
+  return (
+    <div
+      className={`splitter splitter--${orientation} ${className ?? ''}`}
+      role="separator"
+      aria-label={ariaLabel}
+      aria-orientation={orientation === 'vertical' ? 'vertical' : 'horizontal'}
+      tabIndex={-1}
+      onPointerDown={handlePointerDown}
+    />
   );
 }
 

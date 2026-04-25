@@ -11,7 +11,7 @@ export function NotationPanel({ dsl, scene, onChange }: NotationPanelProps) {
   const invalidCount = scene.lines.filter((line) => line.kind === 'invalid').length;
 
   return (
-    <Panel title="NOTATION" flags={invalidCount ? `${invalidCount} invalid` : `${scene.events.length} events`} dense className="notation-panel">
+    <Panel id="notation" title="NOTATION" flags={invalidCount ? `${invalidCount} invalid` : `${scene.events.length} events`} dense className="notation-panel">
       <textarea
         className="notation-editor"
         spellCheck={false}

@@ -121,6 +121,7 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
 
   return (
     <Panel
+      id="director"
       title="DIRECTOR"
       tone="cyan"
       flags={provider}

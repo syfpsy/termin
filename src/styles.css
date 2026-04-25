@@ -274,11 +274,16 @@ input {
   inline-size: 100dvw;
   block-size: 100dvh;
   display: grid;
-  grid-template-columns: minmax(280px, 338px) minmax(360px, 1fr) minmax(240px, 286px);
-  grid-template-rows: 34px minmax(320px, 1fr) minmax(160px, 184px) 22px;
+  grid-template-columns: var(--col-left, 320px) auto minmax(0, 1fr) auto var(--col-right, 270px);
+  grid-template-rows: 34px minmax(0, 1fr) 22px;
   gap: 1px;
   background: var(--bezel-lo);
   overflow: hidden;
+}
+
+.workspace--surface {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 34px minmax(0, 1fr) 22px;
 }
 
 .titlebar,
@@ -300,11 +305,12 @@ input {
 }
 
 .titlebar {
+  grid-row: 1;
   border-bottom: 1px solid var(--bezel);
 }
 
 .statusbar {
-  grid-row: 4;
+  grid-row: 3;
   border-top: 1px solid var(--bezel);
   font-size: 9px;
 }
@@ -396,30 +402,91 @@ input {
   min-width: 0;
   min-height: 0;
   gap: 1px;
+  overflow: hidden;
 }
 
 .left-stack {
-  grid-row: 2 / 4;
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .right-stack {
-  grid-column: 3;
-  grid-row: 2 / 4;
+  grid-column: 5;
+  grid-row: 2;
 }
 
 .preview-stage {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 2;
   background: var(--workspace);
   min-width: 0;
   min-height: 0;
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto var(--row-timeline, 184px);
   overflow: hidden;
 }
 
-.preview-toolbar,
+.splitter {
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  touch-action: none;
+  transition: background-color 120ms ease;
+}
+
+.splitter::after {
+  content: '';
+  position: absolute;
+  background: var(--bezel-hi);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.splitter:hover,
+.splitter:active {
+  background: color-mix(in srgb, var(--phos) 14%, transparent);
+}
+
+.splitter:hover::after,
+.splitter:active::after {
+  opacity: 1;
+}
+
+.splitter--vertical {
+  width: 5px;
+  cursor: col-resize;
+  align-self: stretch;
+}
+
+.splitter--vertical::after {
+  inset: 0 2px;
+}
+
+.splitter--horizontal {
+  height: 5px;
+  cursor: row-resize;
+}
+
+.splitter--horizontal::after {
+  inset: 2px 0;
+}
+
+.splitter--col-left {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.splitter--col-right {
+  grid-column: 4;
+  grid-row: 2;
+}
+
+.splitter--row-timeline {
+  /* sits inside .preview-stage; positioned by row order */
+}
+
 .transport {
   display: flex;
   align-items: center;
@@ -427,13 +494,8 @@ input {
   gap: 7px;
   padding: 8px 14px;
   background: var(--bg);
-  border-bottom: 1px solid var(--bezel);
-  min-width: 0;
-}
-
-.transport {
   border-top: 1px solid var(--bezel);
-  border-bottom: 0;
+  min-width: 0;
 }
 
 .preview-wrap {
@@ -447,8 +509,14 @@ input {
 }
 
 .timeline-slot {
-  grid-column: 2;
-  grid-row: 3;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.timeline-slot > * {
+  flex: 1;
   min-width: 0;
   min-height: 0;
 }
@@ -491,6 +559,54 @@ input {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink);
+}
+
+.panel__toggle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  padding: 2px 4px 2px 0;
+  margin: -2px 0 -2px -4px;
+  border-radius: 2px;
+}
+
+.panel__toggle:hover {
+  color: var(--ink2);
+}
+
+.panel__toggle:hover .panel__chevron {
+  color: var(--phos);
+}
+
+.panel__toggle:focus-visible {
+  outline: 2px solid var(--phos);
+  outline-offset: 2px;
+}
+
+.panel__chevron {
+  display: inline-block;
+  inline-size: 10px;
+  font-size: 9px;
+  color: var(--ink-muted);
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.panel[data-collapsed='true'] {
+  flex: 0 0 auto;
+}
+
+.panel[data-collapsed='true'] > .panel__bar {
+  border-bottom-color: transparent;
+}
+
+.panel__body[hidden] {
+  display: none;
 }
 
 .panel__title-text {
@@ -1870,13 +1986,14 @@ input {
 
 .surface-stage {
   grid-column: 1 / -1;
-  grid-row: 2 / 4;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   background: var(--workspace);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 286px;
   gap: 1px;
+  overflow: hidden;
 }
 
 .surface-side {
@@ -2733,7 +2850,7 @@ input {
 
 @media (max-width: 1180px) {
   .workspace {
-    grid-template-columns: 300px minmax(420px, 1fr) 240px;
+    grid-template-columns: var(--col-left, 300px) auto minmax(0, 1fr) auto var(--col-right, 240px);
   }
 
   .titlebar,

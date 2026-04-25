@@ -46,8 +46,6 @@ import type {
   AnimatableAppearanceProp,
   Appearance,
   EasingKind,
-  PreviewChrome,
-  PreviewMode,
   PropertyAnimation,
   ProviderKind,
   RendererKind,
@@ -76,7 +74,7 @@ import {
   touchRecentScene,
   type RecentScene,
 } from '../state/storage';
-import { Button, Label, Panel, Phos, Segmented, SliderRow } from './components';
+import { Button, Label, Panel, Phos, SliderRow, Splitter } from './components';
 import { DirectorPanel } from './DirectorPanel';
 import { EnginePreview } from './EnginePreview';
 import { NotationPanel } from './NotationPanel';
@@ -163,6 +161,9 @@ export function App() {
   const [onionSkin, setOnionSkin] = useState(false);
   const [past, setPast] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
+  const [colLeftPx, setColLeftPx] = useState(() => loadLayoutDim('colLeft', 320, 220, 600));
+  const [colRightPx, setColRightPx] = useState(() => loadLayoutDim('colRight', 270, 200, 600));
+  const [rowTimelinePx, setRowTimelinePx] = useState(() => loadLayoutDim('rowTimeline', 184, 120, 720));
   const clipboardRef = useRef<string>('');
   const activeDsl = previewDsl ?? dsl;
   const scene = useMemo(() => parseScene(activeDsl), [activeDsl]);
@@ -233,6 +234,19 @@ export function App() {
   useEffect(() => saveRenderer(renderer), [renderer]);
   useEffect(() => saveProvider(provider), [provider]);
   useEffect(() => saveModelProviders(modelProviders), [modelProviders]);
+  useEffect(() => saveLayoutDim('colLeft', colLeftPx), [colLeftPx]);
+  useEffect(() => saveLayoutDim('colRight', colRightPx), [colRightPx]);
+  useEffect(() => saveLayoutDim('rowTimeline', rowTimelinePx), [rowTimelinePx]);
+
+  const resizeColLeft = useCallback((delta: number) => {
+    setColLeftPx((current) => clamp(current + delta, 220, 600));
+  }, []);
+  const resizeColRight = useCallback((delta: number) => {
+    setColRightPx((current) => clamp(current - delta, 200, 600));
+  }, []);
+  const resizeTimelineRow = useCallback((delta: number) => {
+    setRowTimelinePx((current) => clamp(current - delta, 120, 720));
+  }, []);
 
   useEffect(() => {
     setTick(0);
@@ -890,7 +904,18 @@ export function App() {
   }
 
   return (
-    <main className={`workspace ${view === 'author' ? '' : 'workspace--surface'}`}>
+    <main
+      className={`workspace ${view === 'author' ? '' : 'workspace--surface'}`}
+      style={
+        view === 'author'
+          ? ({
+              ['--col-left']: `${colLeftPx}px`,
+              ['--col-right']: `${colRightPx}px`,
+              ['--row-timeline']: `${rowTimelinePx}px`,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <header className="titlebar" aria-label="Application controls">
         <h1 className="brand">
           <span className="brand__mark" aria-hidden="true" />
@@ -975,48 +1000,14 @@ export function App() {
             />
           </aside>
 
-          <section className="preview-stage" aria-label="Live preview and transport">
-            <div className="preview-toolbar" role="toolbar" aria-label="Preview chrome and renderer">
-              <Label>chrome</Label>
-              <Segmented<PreviewChrome>
-                value={appearance.chrome}
-                onChange={(chrome) => updateAppearance({ chrome })}
-                options={[
-                  { value: 'bezel', label: 'bezel' },
-                  { value: 'flat', label: 'flat' },
-                  { value: 'none', label: 'none' },
-                ]}
-              />
-              <Label>mode</Label>
-              <Segmented<PreviewMode>
-                value={appearance.mode}
-                onChange={(mode) => updateAppearance({ mode })}
-                options={[
-                  { value: 'color', label: 'color' },
-                  { value: '1-bit', label: '1-bit' },
-                ]}
-              />
-              <Label>renderer</Label>
-              <Segmented<RendererKind>
-                value={renderer}
-                onChange={setRenderer}
-                options={[
-                  { value: 'webgl', label: 'webgl' },
-                  { value: 'canvas', label: 'canvas' },
-                ]}
-              />
-              <Label>tick</Label>
-              <Segmented<TickRate>
-                value={appearance.tickRate}
-                onChange={(tickRate) => updateAppearance({ tickRate })}
-                options={[
-                  { value: 24, label: '24' },
-                  { value: 30, label: '30' },
-                  { value: 60, label: '60' },
-                ]}
-              />
-            </div>
+          <Splitter
+            orientation="vertical"
+            onResize={resizeColLeft}
+            ariaLabel="Resize director column"
+            className="splitter--col-left"
+          />
 
+          <section className="preview-stage" aria-label="Live preview and transport">
             <div className="preview-wrap">
               <EnginePreview scene={scene} appearance={appearance} renderer={renderer} tick={tick} onionSkin={onionSkin} />
             </div>
@@ -1047,10 +1038,73 @@ export function App() {
               <Phos size={18}>{tick.toString().padStart(3, '0')}</Phos>
               <span className="muted">/ {durationTicks}</span>
             </div>
+
+            <Splitter
+              orientation="horizontal"
+              onResize={resizeTimelineRow}
+              ariaLabel="Resize timeline row"
+              className="splitter--row-timeline"
+            />
+
+            <section className="timeline-slot" aria-label="Scene timeline">
+              <Timeline
+                scene={scene}
+                tick={tick}
+                rate={appearance.tickRate}
+                units={timelineUnits}
+                selectedEventIds={selectedEventIds}
+                rippleEdit={rippleEdit}
+                onionSkin={onionSkin}
+                loopRegion={loopRegion}
+                canUndo={past.length > 0}
+                canRedo={future.length > 0}
+                past={past}
+                future={future}
+                onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))}
+                onUnitsChange={setTimelineUnits}
+                onRippleChange={setRippleEdit}
+                onOnionSkinChange={setOnionSkin}
+                onLoopRegionChange={setLoopRegion}
+                onSelectOne={selectOne}
+                onSelectMany={selectMany}
+                onToggleSelection={toggleSelection}
+                onMoveEvent={moveEvent}
+                onMoveEvents={moveEvents}
+                onResizeEvent={resizeEvent}
+                onDeleteEvent={deleteEvent}
+                onDeleteEvents={deleteEvents}
+                onPatchEvent={patchEvent}
+                onAddEventAt={addEventAt}
+                onSplitEvent={splitEventAt}
+                onSetEventFlag={setEventFlag}
+                onAddMarker={addMarkerAt}
+                onRemoveMarker={removeMarker}
+                onCopySelection={copySelectionToClipboard}
+                onCutSelection={cutSelectionToClipboard}
+                onPasteAt={pasteFromClipboard}
+                onRescaleSelection={rescaleSelectionTo}
+                onUndo={undo}
+                onRedo={redo}
+                onJumpToHistory={jumpHistory}
+                onUpsertKeyframe={upsertKeyframeAt}
+                onMoveKeyframe={moveKeyframe}
+                onSetKeyframeValue={setKeyframeValue}
+                onSetKeyframeEasing={setKeyframeEasing}
+                onRemoveKeyframe={removeKeyframe}
+                onRemoveAnimation={removeAnimation}
+              />
+            </section>
           </section>
 
+          <Splitter
+            orientation="vertical"
+            onResize={resizeColRight}
+            ariaLabel="Resize phosphor column"
+            className="splitter--col-right"
+          />
+
           <aside className="right-stack" aria-label="Phosphor controls, library, and effects">
-            <Panel title="PHOSPHOR" dense>
+            <Panel id="phosphor-controls" title="PHOSPHOR" dense>
               <SliderRow
                 label="decay"
                 value={appearance.decay}
@@ -1127,7 +1181,7 @@ export function App() {
 
             <SceneLibrary onFork={forkLibraryScene} />
 
-            <Panel title="EFFECTS" flags="12 primitives" dense flush className="effects-panel">
+            <Panel id="effects" title="EFFECTS" flags="12 primitives" dense flush className="effects-panel">
               {EFFECTS.map(([name, description]) => {
                 const used = scene.events.filter((event) => event.effect === name).length;
                 return (
@@ -1143,55 +1197,6 @@ export function App() {
               })}
             </Panel>
           </aside>
-
-          <section className="timeline-slot" aria-label="Scene timeline">
-            <Timeline
-              scene={scene}
-              tick={tick}
-              rate={appearance.tickRate}
-              units={timelineUnits}
-              selectedEventIds={selectedEventIds}
-              rippleEdit={rippleEdit}
-              onionSkin={onionSkin}
-              loopRegion={loopRegion}
-              canUndo={past.length > 0}
-              canRedo={future.length > 0}
-              past={past}
-              future={future}
-              onScrub={(nextTick) => setTick(Math.max(0, Math.min(durationTicks - 1, nextTick)))}
-              onUnitsChange={setTimelineUnits}
-              onRippleChange={setRippleEdit}
-              onOnionSkinChange={setOnionSkin}
-              onLoopRegionChange={setLoopRegion}
-              onSelectOne={selectOne}
-              onSelectMany={selectMany}
-              onToggleSelection={toggleSelection}
-              onMoveEvent={moveEvent}
-              onMoveEvents={moveEvents}
-              onResizeEvent={resizeEvent}
-              onDeleteEvent={deleteEvent}
-              onDeleteEvents={deleteEvents}
-              onPatchEvent={patchEvent}
-              onAddEventAt={addEventAt}
-              onSplitEvent={splitEventAt}
-              onSetEventFlag={setEventFlag}
-              onAddMarker={addMarkerAt}
-              onRemoveMarker={removeMarker}
-              onCopySelection={copySelectionToClipboard}
-              onCutSelection={cutSelectionToClipboard}
-              onPasteAt={pasteFromClipboard}
-              onRescaleSelection={rescaleSelectionTo}
-              onUndo={undo}
-              onRedo={redo}
-              onJumpToHistory={jumpHistory}
-              onUpsertKeyframe={upsertKeyframeAt}
-              onMoveKeyframe={moveKeyframe}
-              onSetKeyframeValue={setKeyframeValue}
-              onSetKeyframeEasing={setKeyframeEasing}
-              onRemoveKeyframe={removeKeyframe}
-              onRemoveAnimation={removeAnimation}
-            />
-          </section>
         </>
       ) : (
         <section className="surface-stage" aria-label={`${view} surface`}>
@@ -1394,6 +1399,26 @@ function ViewportLock() {
 function parseHashView(): AppView {
   const hash = window.location.hash.replace('#', '');
   return NAV_ITEMS.some((item) => item.view === hash) ? (hash as AppView) : 'author';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+function loadLayoutDim(key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === 'undefined') return fallback;
+  const raw = window.localStorage.getItem(`phosphor:layout:${key}`);
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return clamp(parsed, min, max);
+}
+
+function saveLayoutDim(key: string, value: number): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(`phosphor:layout:${key}`, String(Math.round(value)));
 }
 
 function formatTime(tick: number, rate: number) {

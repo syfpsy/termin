@@ -9,6 +9,7 @@ type SceneLibraryProps = {
 export function SceneLibrary({ onFork }: SceneLibraryProps) {
   return (
     <Panel
+      id="library"
       title="LIBRARY"
       flags={`${SCENE_LIBRARY.length} seeds`}
       dense
