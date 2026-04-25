@@ -818,6 +818,27 @@ at 0ms type "{{users}}/{{ghost}}"`);
   assert.equal(appendedScene.animations.length, 1, 'appended animation parses');
   assert.equal(appendedScene.animations[0].keyframes[1].easing, 'ease-in', 'appended easing preserved');
 
+  // appendAnimation with eventLine — per-event keyframes (Effect Controls)
+  const eventScene = `scene e 1s\nat 0ms pulse "warming" amber 600ms`;
+  const eventAppended = appendAnimation({
+    source: eventScene,
+    property: 'intensity',
+    eventLine: 2, // the pulse line
+    keyframes: [
+      { at: 0, value: 0.3, easing: 'linear' },
+      { at: 600, value: 1.0, easing: 'ease-in' },
+    ],
+  });
+  assert.ok(eventAppended.lineNumber !== null, 'event-targeted animation appended');
+  const eventParsed = parseScene(eventAppended.source);
+  assert.equal(eventParsed.animations.length, 1);
+  assert.equal(eventParsed.animations[0].eventLine, 2, 'eventLine round-trips through DSL');
+  assert.equal(eventParsed.animations[0].property, 'intensity');
+  assert.ok(
+    eventAppended.source.includes('prop event-2 intensity'),
+    'per-event prop line uses event-N syntax',
+  );
+
   // unknown property fails clearly
   const bogus = parseScene(`scene b 1s\nprop zzz 0ms 1.0`);
   assert.ok(

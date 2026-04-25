@@ -2,6 +2,7 @@ import { estimateEventDuration, isFlagToken, parseFirstDuration } from './dsl';
 import { formatPropertyLine } from './keyframes';
 import type {
   AnimatableAppearanceProp,
+  AnimatableEventParam,
   EasingKind,
   EventFlags,
   PropertyAnimation,
@@ -510,8 +511,10 @@ export function deleteAnimationInSource(source: string, animation: PropertyAnima
 
 export type CreateAnimationInput = {
   source: string;
-  property: AnimatableAppearanceProp;
+  property: AnimatableAppearanceProp | AnimatableEventParam;
   keyframes: PropertyKeyframe[];
+  /** When set, emit a `prop event-N <param>` line targeting that source line. */
+  eventLine?: number | null;
 };
 
 export function appendAnimation(input: CreateAnimationInput): LineEditResult {
@@ -519,7 +522,11 @@ export function appendAnimation(input: CreateAnimationInput): LineEditResult {
   const sorted = [...input.keyframes].sort((a, b) => a.at - b.at);
   return appendLine(
     input.source,
-    formatPropertyLine({ property: input.property, keyframes: sorted }),
+    formatPropertyLine({
+      property: input.property,
+      keyframes: sorted,
+      eventLine: input.eventLine ?? null,
+    }),
   );
 }
 

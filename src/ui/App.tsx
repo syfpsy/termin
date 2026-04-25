@@ -111,6 +111,7 @@ import {
 } from './Surfaces';
 import { ProjectPanel } from './ProjectPanel';
 import { AssetPanel } from './AssetPanel';
+import { EffectControlsPanel } from './EffectControlsPanel';
 import { Timeline } from './Timeline';
 
 type AppView =
@@ -953,7 +954,9 @@ export function App() {
 
   const upsertKeyframeAt = useCallback(
     (prop: AnimatableAppearanceProp, atMs: number, value: number, easing: EasingKind = 'linear') => {
-      const existing = scene.animations.find((animation) => animation.property === prop);
+      const existing = scene.animations.find(
+        (animation) => animation.property === prop && animation.eventLine === null,
+      );
       if (existing) {
         commitDsl(addKeyframeToAnimation(dsl, existing, { at: atMs, value, easing }));
       } else {
@@ -961,6 +964,26 @@ export function App() {
           source: dsl,
           property: prop,
           keyframes: [{ at: atMs, value, easing }],
+        });
+        if (result.lineNumber !== null) commitDsl(result.source);
+      }
+    },
+    [commitDsl, dsl, scene.animations],
+  );
+
+  const upsertEventKeyframeAt = useCallback(
+    (event: SceneEvent, param: 'intensity', atMs: number, value: number, easing: EasingKind = 'linear') => {
+      const existing = scene.animations.find(
+        (animation) => animation.property === param && animation.eventLine === event.line,
+      );
+      if (existing) {
+        commitDsl(addKeyframeToAnimation(dsl, existing, { at: atMs, value, easing }));
+      } else {
+        const result = appendAnimation({
+          source: dsl,
+          property: param,
+          keyframes: [{ at: atMs, value, easing }],
+          eventLine: event.line,
         });
         if (result.lineNumber !== null) commitDsl(result.source);
       }
@@ -1396,7 +1419,17 @@ export function App() {
             className="splitter--col-right"
           />
 
-          <aside className="right-stack" aria-label="Scene library and effects">
+          <aside className="right-stack" aria-label="Effect controls, library, and effects">
+            <EffectControlsPanel
+              event={selectedEvents.length === 1 ? selectedEvents[0] : null}
+              scene={scene}
+              rate={appearance.tickRate}
+              playheadMs={Math.round((tick / appearance.tickRate) * 1000)}
+              onPatchEvent={patchEvent}
+              onDeleteEvent={deleteEvent}
+              onUpsertEventKeyframe={upsertEventKeyframeAt}
+              onRemoveAnimation={removeAnimation}
+            />
             <SceneLibrary onFork={forkLibraryScene} />
 
             <Panel id="effects" title="EFFECTS" flags={`${EFFECTS.length} primitives`} dense flush className="effects-panel">

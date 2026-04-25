@@ -2379,6 +2379,91 @@ input {
   background: color-mix(in srgb, var(--cyan) 14%, transparent);
 }
 
+/* ---- effect controls ---- */
+
+.effect-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.effect-controls__empty {
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 12px;
+}
+
+.effect-controls__row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.effect-controls__row--animatable {
+  grid-template-columns: 64px minmax(0, 1fr) auto auto;
+}
+
+.effect-controls__row label,
+.effect-controls__label {
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+
+.effect-controls__number,
+.effect-controls__text {
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  inline-size: 100%;
+}
+
+.effect-controls__number:focus,
+.effect-controls__text:focus {
+  outline: 1px solid var(--phos);
+  outline-offset: -1px;
+}
+
+.effect-controls__tones {
+  display: flex;
+  gap: 4px;
+}
+
+.effect-controls__tone {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--bezel-hi);
+  cursor: pointer;
+  background-clip: padding-box;
+}
+
+.effect-controls__tone[data-active='true'] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.effect-controls__display {
+  font-size: 11px;
+  color: var(--ink);
+  min-inline-size: 36px;
+  text-align: end;
+}
+
+.effect-controls__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-block-start: 4px;
+}
+
 .surface-stage {
   grid-column: 1 / -1;
   grid-row: 2;
