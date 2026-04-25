@@ -354,3 +354,72 @@ export function duplicateScene(project: Project, sceneId: SceneId): Project {
     thumbnail: source.thumbnail,
   });
 }
+
+/* ---------- assets ---------- */
+
+export function addAsset(project: Project, body: ProjectAssetBody, name: string): Project {
+  const now = new Date().toISOString();
+  const asset: ProjectAsset = {
+    id: crypto.randomUUID(),
+    name: name || 'untitled_asset',
+    createdAt: now,
+    updatedAt: now,
+    ...body,
+  };
+  return {
+    ...project,
+    updatedAt: now,
+    assets: [...project.assets, asset],
+  };
+}
+
+export function removeAsset(project: Project, assetId: AssetId): Project {
+  return {
+    ...project,
+    updatedAt: new Date().toISOString(),
+    assets: project.assets.filter((asset) => asset.id !== assetId),
+  };
+}
+
+export function renameAsset(project: Project, assetId: AssetId, name: string): Project {
+  if (!name.trim()) return project;
+  const now = new Date().toISOString();
+  return {
+    ...project,
+    updatedAt: now,
+    assets: project.assets.map((asset) =>
+      asset.id === assetId ? { ...asset, name, updatedAt: now } : asset,
+    ),
+  };
+}
+
+export function patchAsset(
+  project: Project,
+  assetId: AssetId,
+  body: ProjectAssetBody,
+): Project {
+  const now = new Date().toISOString();
+  return {
+    ...project,
+    updatedAt: now,
+    assets: project.assets.map((asset) =>
+      asset.id === assetId ? ({ ...asset, ...body, updatedAt: now } as ProjectAsset) : asset,
+    ),
+  };
+}
+
+export const DEFAULT_PALETTE: PalettePayload = {
+  phos: '#D6F04A',
+  phosDim: '#8aa028',
+  amber: '#FFA94B',
+  amberDim: '#a86a2a',
+  green: '#7FE093',
+  red: '#FF6B6B',
+  cyan: '#7FE3E0',
+  magenta: '#E77FD9',
+  ink: '#CDDDA0',
+  inkDim: '#7A8F56',
+  inkMuted: '#7e8d56',
+  inkFaint: '#2f3a22',
+  ink2: '#FFC985',
+};

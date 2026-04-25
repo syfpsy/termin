@@ -939,6 +939,97 @@ at 0ms type "{{users}}/{{ghost}}"`);
   assert.equal(future?.renderPresets.length, 0, 'unknown render target dropped');
 }
 
+// Asset CRUD + DSL conversion
+{
+  const {
+    addAsset,
+    addScene: addScene2,
+    makeEmptyProject,
+    patchAsset,
+    removeAsset,
+    renameAsset,
+    DEFAULT_PALETTE,
+  } = await import('../src/state/projectSchema');
+  const {
+    applyDataAssetToSource,
+    assetToEventLines,
+    insertEventLinesIntoSource,
+    assetPreview,
+  } = await import('../src/state/assetUtils');
+
+  // addAsset / patchAsset / renameAsset / removeAsset
+  const empty = makeEmptyProject('A', 'scene a 1s\nat 0ms type "x"', 'a');
+  const withText = addAsset(empty, { kind: 'text', text: 'SYSTEM ONLINE' }, 'snippet1');
+  assert.equal(withText.assets.length, 1, 'asset added');
+  assert.equal(withText.assets[0].kind, 'text', 'kind preserved');
+
+  const renamed = renameAsset(withText, withText.assets[0].id, 'system_message');
+  assert.equal(renamed.assets[0].name, 'system_message');
+
+  const patched = patchAsset(renamed, renamed.assets[0].id, { kind: 'text', text: 'NEW TEXT' });
+  assert.equal(patched.assets[0].kind === 'text' && patched.assets[0].text === 'NEW TEXT', true);
+
+  const removed = removeAsset(patched, patched.assets[0].id);
+  assert.equal(removed.assets.length, 0, 'asset removed');
+
+  // assetToEventLines: text snippet → single line, sanitized
+  const textAsset = renamed.assets[0];
+  const lines = assetToEventLines(textAsset, 0);
+  assert.deepEqual(lines, ['at 0ms type "SYSTEM ONLINE" slowly']);
+  assert.equal(assetPreview(textAsset).startsWith('SYSTEM ONLINE'), true);
+
+  // assetToEventLines: ascii art → staggered lines
+  const asciiAsset = addAsset(empty, { kind: 'ascii', lines: ['LINE A', 'LINE B', 'LINE C'] }, 'frame1').assets[0];
+  const asciiLines = assetToEventLines(asciiAsset, 1000);
+  assert.equal(asciiLines.length, 3, 'one line per ascii row');
+  assert.ok(asciiLines[0].startsWith('at 1000ms type "LINE A"'));
+  assert.ok(asciiLines[1].startsWith('at 1200ms type "LINE B"'));
+  assert.ok(asciiLines[2].startsWith('at 1400ms type "LINE C"'));
+
+  // insertEventLinesIntoSource: appends to end
+  const sceneSource = `scene boot 1s\nat 0ms type "ABC"`;
+  const inserted = insertEventLinesIntoSource(sceneSource, ['at 500ms type "INSERTED"']);
+  const insertedScene = parseScene(inserted);
+  assert.equal(insertedScene.events.length, 2, 'inserted line is now an event');
+  assert.equal(insertedScene.events[1].target, 'INSERTED');
+
+  // applyDataAssetToSource: injects data line right after scene header
+  const baseScene = `scene s 1s\nat 0ms type "x"`;
+  const dataAsset = { users: 5, status: 'ok' };
+  const withData = applyDataAssetToSource(baseScene, dataAsset);
+  const dataParsed = parseScene(withData);
+  assert.deepEqual(dataParsed.data, dataAsset, 'data block parsed back into project');
+  // No duplication on second apply
+  const reapplied = applyDataAssetToSource(withData, { users: 99 });
+  const reparsed = parseScene(reapplied);
+  assert.deepEqual(reparsed.data, { users: 99 }, 'second apply replaces, not duplicates');
+  assert.equal(
+    reparsed.lines.filter((line) => line.kind === 'data').length,
+    1,
+    'only one data line after reapply',
+  );
+
+  // Palette asset survives normalize round-trip
+  const paletteProject = addAsset(empty, { kind: 'palette', tones: DEFAULT_PALETTE }, 'phosphor_default');
+  assert.equal(paletteProject.assets[0].kind, 'palette');
+  if (paletteProject.assets[0].kind === 'palette') {
+    assert.equal(paletteProject.assets[0].tones.phos, '#D6F04A');
+  }
+
+  // Project with multiple scenes + assets round-trips through normalizeProject
+  const richProject = addScene2(
+    addAsset(empty, { kind: 'data', data: { x: 1 } }, 'config'),
+    { name: 'second', dsl: 'scene s 1s\nat 0ms type "y"', durationMs: 1000 },
+  );
+  const { normalizeProject } = await import('../src/state/projectSchema');
+  const ser = JSON.parse(JSON.stringify(richProject));
+  const restored = normalizeProject(ser);
+  assert.ok(restored, 'rich project normalizes');
+  assert.equal(restored?.scenes.length, 2);
+  assert.equal(restored?.assets.length, 1);
+  assert.equal(restored?.assets[0].kind, 'data');
+}
+
 console.log(
   `export smoke passed: ${bundle.scene.events.length} events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg poster ${svg.length}B / animated ${animatedSvg.length}B`,
 );

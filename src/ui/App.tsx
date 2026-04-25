@@ -70,14 +70,25 @@ import {
 } from '../state/storage';
 import { saveProject as persistProject } from '../state/projectDb';
 import {
+  addAsset,
   addScene,
   duplicateScene as duplicateProjectScene,
+  patchAsset,
   patchScene,
+  removeAsset,
   removeScene,
+  renameAsset,
   renameScene,
   type Project,
+  type ProjectAsset,
+  type ProjectAssetBody,
   type SceneId,
 } from '../state/projectSchema';
+import {
+  applyDataAssetToSource,
+  assetToEventLines,
+  insertEventLinesIntoSource,
+} from '../state/assetUtils';
 import { clearLegacyState, loadOrInitActiveProject } from '../state/projectMigration';
 import { DEFAULT_DSL } from '../engine/dsl';
 import { Button, Label, Panel, Phos, Splitter } from './components';
@@ -98,6 +109,7 @@ import {
   StartSurface,
 } from './Surfaces';
 import { ProjectPanel } from './ProjectPanel';
+import { AssetPanel } from './AssetPanel';
 import { Timeline } from './Timeline';
 
 type AppView =
@@ -640,6 +652,88 @@ export function App() {
     applyProject({ ...flushed, name, updatedAt: new Date().toISOString() });
   }
 
+  /* ---------- assets ---------- */
+
+  function addAssetToProject(body: ProjectAssetBody, name: string) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject(addAsset(flushed, body, name));
+  }
+
+  function renameAssetInProject(assetId: string, name: string) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject(renameAsset(flushed, assetId, name));
+  }
+
+  function removeAssetFromProject(assetId: string) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject(removeAsset(flushed, assetId));
+  }
+
+  function patchAssetInProject(assetId: string, body: ProjectAssetBody) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject(patchAsset(flushed, assetId, body));
+  }
+
+  /**
+   * Insert an asset into the active scene at the playhead time.
+   * Text/ASCII/image-ASCII produce `at <ms>ms type` lines; palette
+   * mutates appearance; data injects (or replaces) the `data {}` line.
+   */
+  function applyAssetAtPlayhead(asset: ProjectAsset) {
+    if (!project) return;
+    const playheadMs = Math.round((tick / appearance.tickRate) * 1000);
+
+    if (asset.kind === 'palette') {
+      // Cosmetic only — palette drives the renderer tones via CSS vars
+      // future work. For now, mark on the project so we can pick it up
+      // when palette tokens are wired into the engine.
+      applyProject({
+        ...project,
+        meta: { ...project.meta, lastAppliedPaletteId: asset.id } as Project['meta'],
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (asset.kind === 'data') {
+      const next = applyDataAssetToSource(dsl, asset.data);
+      commitDsl(next);
+      return;
+    }
+
+    const fragments = assetToEventLines(asset, playheadMs);
+    if (fragments.length === 0) return;
+    const next = insertEventLinesIntoSource(dsl, fragments);
+    commitDsl(next);
+  }
+
+  function applyAssetByIdAtMs(assetId: string, atMs: number) {
+    if (!project) return;
+    const asset = project.assets.find((a) => a.id === assetId);
+    if (!asset) return;
+    if (asset.kind === 'palette') {
+      applyProject({
+        ...project,
+        meta: { ...project.meta, lastAppliedPaletteId: asset.id } as Project['meta'],
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    if (asset.kind === 'data') {
+      const next = applyDataAssetToSource(dsl, asset.data);
+      commitDsl(next);
+      return;
+    }
+    const fragments = assetToEventLines(asset, atMs);
+    if (fragments.length === 0) return;
+    const next = insertEventLinesIntoSource(dsl, fragments);
+    commitDsl(next);
+  }
+
   const moveEvent = useCallback(
     (event: SceneEvent, atMs: number) => {
       const next = moveEventInSource({
@@ -1119,7 +1213,7 @@ export function App() {
 
       {view === 'author' ? (
         <>
-          <aside className="left-stack" aria-label="Project, director, and notation">
+          <aside className="left-stack" aria-label="Project, assets, director, and notation">
             {project && (
               <ProjectPanel
                 project={project}
@@ -1129,6 +1223,16 @@ export function App() {
                 onDuplicateScene={duplicateSceneById}
                 onDeleteScene={deleteSceneById}
                 onRenameProject={renameProject}
+              />
+            )}
+            {project && (
+              <AssetPanel
+                assets={project.assets}
+                onAdd={addAssetToProject}
+                onRename={renameAssetInProject}
+                onDelete={removeAssetFromProject}
+                onUpdate={patchAssetInProject}
+                onApplyAtPlayhead={applyAssetAtPlayhead}
               />
             )}
             <DirectorPanel
@@ -1242,6 +1346,7 @@ export function App() {
                 onSetKeyframeEasing={setKeyframeEasing}
                 onRemoveKeyframe={removeKeyframe}
                 onRemoveAnimation={removeAnimation}
+                onDropAssetAt={applyAssetByIdAtMs}
               />
             </section>
           </section>
@@ -1327,7 +1432,7 @@ export function App() {
           )}
           {view === 'docs' && <DocsSurface />}
           {view === 'empty' && <EmptySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
-          <aside className="surface-side" aria-label="Project and scene state">
+          <aside className="surface-side" aria-label="Project, assets, and scene state">
             {project && (
               <ProjectPanel
                 project={project}
@@ -1337,6 +1442,16 @@ export function App() {
                 onDuplicateScene={duplicateSceneById}
                 onDeleteScene={deleteSceneById}
                 onRenameProject={renameProject}
+              />
+            )}
+            {project && (
+              <AssetPanel
+                assets={project.assets}
+                onAdd={addAssetToProject}
+                onRename={renameAssetInProject}
+                onDelete={removeAssetFromProject}
+                onUpdate={patchAssetInProject}
+                onApplyAtPlayhead={applyAssetAtPlayhead}
               />
             )}
             <SceneSummaryPanel scene={scene} />

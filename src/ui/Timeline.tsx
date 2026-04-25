@@ -101,6 +101,7 @@ type TimelineProps = {
   onSetKeyframeEasing: (animation: PropertyAnimation, index: number, easing: EasingKind) => void;
   onRemoveKeyframe: (animation: PropertyAnimation, index: number) => void;
   onRemoveAnimation: (animation: PropertyAnimation) => void;
+  onDropAssetAt?: (assetId: string, atMs: number) => void;
 };
 
 type KeyframeDragState = {
@@ -183,6 +184,7 @@ export function Timeline(props: TimelineProps) {
     onSetKeyframeEasing,
     onRemoveKeyframe,
     onRemoveAnimation,
+    onDropAssetAt,
   } = props;
 
   const durationTicks = Math.max(1, Math.ceil((scene.duration / 1000) * rate));
@@ -605,6 +607,23 @@ export function Timeline(props: TimelineProps) {
             // bare click on the tracks (not a row/bar/lane) clears selection
             if ((event.target as HTMLElement).closest('.timeline__row')) return;
             onSelectOne(null);
+          }}
+          onDragOver={(event) => {
+            if (!onDropAssetAt) return;
+            if (Array.from(event.dataTransfer.types).includes('application/x-phosphor-asset')) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+            }
+          }}
+          onDrop={(event) => {
+            if (!onDropAssetAt) return;
+            const assetId = event.dataTransfer.getData('application/x-phosphor-asset');
+            if (!assetId) return;
+            event.preventDefault();
+            const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+            const atMs = Math.round(ratio * scene.duration);
+            onDropAssetAt(assetId, atMs);
           }}
         >
           {scene.events.map((event) => {
