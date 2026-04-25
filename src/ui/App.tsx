@@ -143,6 +143,7 @@ export function App() {
   );
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => new Set());
   const [timelineUnits, setTimelineUnits] = useState<'frame' | 'ms'>('frame');
+  const [helpOpen, setHelpOpen] = useState(false);
   const [rippleEdit, setRippleEdit] = useState(false);
   const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
   const [onionSkin, setOnionSkin] = useState(false);
@@ -779,6 +780,11 @@ export function App() {
         addMarkerAt(`mark ${scene.markers.length + 1}`, playheadMs);
         return;
       }
+      if (event.key === '?' || (event.shiftKey && event.key === '/')) {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+        return;
+      }
       if (event.key === ',' || event.key === '.') {
         event.preventDefault();
         const direction = event.key === '.' ? 1 : -1;
@@ -788,6 +794,11 @@ export function App() {
       }
 
       if (event.key === 'Escape') {
+        if (helpOpen) {
+          event.preventDefault();
+          setHelpOpen(false);
+          return;
+        }
         if (selectedEventIds.size > 0) {
           event.preventDefault();
           setSelectedEventIds(new Set());
@@ -820,6 +831,7 @@ export function App() {
     cutSelectionToClipboard,
     deleteEvents,
     durationTicks,
+    helpOpen,
     moveEvents,
     pasteFromClipboard,
     redo,
@@ -889,6 +901,9 @@ export function App() {
           onClick={redo}
           kbd="⌘⇧Z"
         />
+        <Button aria-label="Keyboard shortcuts" onClick={() => setHelpOpen(true)} kbd="?">
+          ?
+        </Button>
         <Button icon={<FileUp size={13} />} onClick={() => fileInputRef.current?.click()}>
           import
         </Button>
@@ -1201,7 +1216,104 @@ export function App() {
           director {provider} - renderer {renderer}
         </span>
       </footer>
+
+      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
     </main>
+  );
+}
+
+const SHORTCUT_GROUPS: Array<{ heading: string; rows: Array<[string, string]> }> = [
+  {
+    heading: 'transport',
+    rows: [
+      ['space', 'play / pause'],
+      [', / .', 'step ±1 frame'],
+      ['shift + , / .', 'step ±1 second'],
+      ['m', 'drop marker at playhead'],
+    ],
+  },
+  {
+    heading: 'history',
+    rows: [
+      ['⌘ z', 'undo'],
+      ['⌘ shift z', 'redo'],
+      ['⌘ y', 'redo (alternate)'],
+    ],
+  },
+  {
+    heading: 'selection',
+    rows: [
+      ['click bar', 'select'],
+      ['shift + click', 'add to selection'],
+      ['drag empty area', 'marquee box-select'],
+      ['⌘ a', 'select all'],
+      ['esc', 'clear selection'],
+    ],
+  },
+  {
+    heading: 'edit',
+    rows: [
+      ['drag bar', 'move event (snap-aware)'],
+      ['drag right edge', 'resize event (when supported)'],
+      ['arrow ← / →', 'nudge ±1 tick'],
+      ['shift + arrow', 'nudge ±10 ticks'],
+      ['delete / backspace', 'remove selected events'],
+      ['⌘ shift d', 'split event at playhead'],
+    ],
+  },
+  {
+    heading: 'clipboard',
+    rows: [
+      ['⌘ c / ⌘ x', 'copy / cut selection'],
+      ['⌘ v', 'paste at playhead'],
+    ],
+  },
+  {
+    heading: 'animation',
+    rows: [
+      ['◆ on a slider', 'add keyframe at playhead'],
+      ['click empty prop lane', 'insert keyframe at click time'],
+      ['drag a diamond', 'move keyframe (snap-aware)'],
+      ['click a diamond', 'edit value / easing / delete'],
+    ],
+  },
+  {
+    heading: 'help',
+    rows: [['?', 'toggle this overlay']],
+  },
+];
+
+type HelpOverlayProps = { onClose: () => void };
+
+function HelpOverlay({ onClose }: HelpOverlayProps) {
+  return (
+    <div className="help-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={onClose}>
+      <div className="help-overlay__panel" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <strong>shortcuts</strong>
+          <button type="button" aria-label="Close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="help-overlay__body">
+          {SHORTCUT_GROUPS.map((group) => (
+            <section key={group.heading}>
+              <h3>{group.heading}</h3>
+              <dl>
+                {group.rows.map(([key, description]) => (
+                  <div key={key}>
+                    <dt>
+                      <kbd>{key}</kbd>
+                    </dt>
+                    <dd>{description}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

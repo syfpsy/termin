@@ -105,6 +105,117 @@ input {
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
 }
 
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 4vw, 60px);
+}
+
+.help-overlay__panel {
+  inline-size: min(720px, 100%);
+  max-block-size: 100%;
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+}
+
+.help-overlay__panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-block-end: 1px solid var(--bezel);
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.help-overlay__panel header strong {
+  color: var(--phos);
+  text-shadow: var(--glow-phos);
+}
+
+.help-overlay__panel header button {
+  background: transparent;
+  border: 1px solid var(--bezel);
+  color: var(--ink-muted);
+  inline-size: 22px;
+  block-size: 22px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.help-overlay__panel header button:hover {
+  color: var(--amber);
+  border-color: var(--bezel-hi);
+}
+
+.help-overlay__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  padding: 18px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.help-overlay__body section {
+  display: grid;
+  gap: 6px;
+}
+
+.help-overlay__body h3 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.help-overlay__body dl {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.help-overlay__body dl > div {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.help-overlay__body dt {
+  margin: 0;
+}
+
+.help-overlay__body dd {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+}
+
+.help-overlay__body kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--bezel-hi);
+  border-radius: 2px;
+  color: var(--ink);
+  font-size: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.06em;
+}
+
 .viewport-lock {
   display: grid;
   place-items: center;
