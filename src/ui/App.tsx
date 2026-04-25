@@ -1123,6 +1123,12 @@ export function App() {
               onUndo={undo}
               onRedo={redo}
               onJumpToHistory={jumpHistory}
+              onUpsertKeyframe={upsertKeyframeAt}
+              onMoveKeyframe={moveKeyframe}
+              onSetKeyframeValue={setKeyframeValue}
+              onSetKeyframeEasing={setKeyframeEasing}
+              onRemoveKeyframe={removeKeyframe}
+              onRemoveAnimation={removeAnimation}
             />
           </section>
         </>

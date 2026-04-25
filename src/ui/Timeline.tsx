@@ -1,8 +1,19 @@
-import { Eye, EyeOff, Flag, History, Lock, Plus, Redo2, ShipWheel, Trash2, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { Eye, EyeOff, Flag, History, Lock, Plus, Redo2, ShipWheel, Trash2, Undo2, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { estimateEventDuration, eventTone } from '../engine/dsl';
 import { inferDisplayDuration, isResizable, type FlagName } from '../engine/dslEdit';
-import type { ParsedScene, SceneEvent, SceneMarker, TickRate, ToneName } from '../engine/types';
+import { sampleAnimation } from '../engine/keyframes';
+import type {
+  AnimatableAppearanceProp,
+  EasingKind,
+  ParsedScene,
+  PropertyAnimation,
+  PropertyKeyframe,
+  SceneEvent,
+  SceneMarker,
+  TickRate,
+  ToneName,
+} from '../engine/types';
 import { Button, Panel } from './components';
 
 const ADDABLE_EFFECTS: Array<{ value: string; label: string; category: string }> = [
@@ -83,6 +94,21 @@ type TimelineProps = {
   onUndo: () => void;
   onRedo: () => void;
   onJumpToHistory: (stepsBack: number) => void;
+  onUpsertKeyframe: (prop: AnimatableAppearanceProp, atMs: number, value: number, easing?: EasingKind) => void;
+  onMoveKeyframe: (animation: PropertyAnimation, index: number, atMs: number) => void;
+  onSetKeyframeValue: (animation: PropertyAnimation, index: number, value: number) => void;
+  onSetKeyframeEasing: (animation: PropertyAnimation, index: number, easing: EasingKind) => void;
+  onRemoveKeyframe: (animation: PropertyAnimation, index: number) => void;
+  onRemoveAnimation: (animation: PropertyAnimation) => void;
+};
+
+type KeyframeDragState = {
+  animationId: string;
+  index: number;
+  startClientX: number;
+  startAtMs: number;
+  laneWidthPx: number;
+  previewAtMs: number;
 };
 
 type DragKind = 'move' | 'resize' | 'group-move';
@@ -150,6 +176,12 @@ export function Timeline(props: TimelineProps) {
     onUndo,
     onRedo,
     onJumpToHistory,
+    onUpsertKeyframe,
+    onMoveKeyframe,
+    onSetKeyframeValue,
+    onSetKeyframeEasing,
+    onRemoveKeyframe,
+    onRemoveAnimation,
   } = props;
 
   const durationTicks = Math.max(1, Math.ceil((scene.duration / 1000) * rate));
@@ -161,9 +193,11 @@ export function Timeline(props: TimelineProps) {
   );
 
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [keyframeDrag, setKeyframeDrag] = useState<KeyframeDragState | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [adderAt, setAdderAt] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [keyframePopover, setKeyframePopover] = useState<{ animationId: string; index: number } | null>(null);
 
   const tracksRef = useRef<HTMLDivElement | null>(null);
   const suppressClickRef = useRef(false);
@@ -256,6 +290,37 @@ export function Timeline(props: TimelineProps) {
       document.removeEventListener('pointercancel', onUp);
     };
   }, [drag, onMoveEvent, onMoveEvents, onResizeEvent, scene.duration, scene.events, selectedEvents, snap]);
+
+  // Keyframe drag — moves a single keyframe along its property track
+  useEffect(() => {
+    if (!keyframeDrag) return;
+    const animation = scene.animations.find((entry) => entry.id === keyframeDrag.animationId);
+    if (!animation) {
+      setKeyframeDrag(null);
+      return;
+    }
+    const onMove = (event: PointerEvent) => {
+      const deltaPx = event.clientX - keyframeDrag.startClientX;
+      const deltaMs = (deltaPx / Math.max(1, keyframeDrag.laneWidthPx)) * scene.duration;
+      const proposed = clampMs(keyframeDrag.startAtMs + deltaMs, 0, scene.duration);
+      const snapped = snap(proposed, keyframeDrag.laneWidthPx).value;
+      setKeyframeDrag({ ...keyframeDrag, previewAtMs: snapped });
+    };
+    const onUp = () => {
+      if (keyframeDrag.previewAtMs !== keyframeDrag.startAtMs) {
+        onMoveKeyframe(animation, keyframeDrag.index, keyframeDrag.previewAtMs);
+      }
+      setKeyframeDrag(null);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+    return () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+  }, [keyframeDrag, onMoveKeyframe, scene.animations, scene.duration, snap]);
 
   // Marquee drag (box-select)
   useEffect(() => {
@@ -662,6 +727,57 @@ export function Timeline(props: TimelineProps) {
             );
           })}
 
+          {scene.animations.length > 0 && (
+            <div className="timeline__props" role="group" aria-label="Property animations">
+              {scene.animations.map((animation) => (
+                <PropertyTrack
+                  key={animation.id}
+                  animation={animation}
+                  sceneDuration={scene.duration}
+                  draggingIndex={
+                    keyframeDrag?.animationId === animation.id ? keyframeDrag.index : null
+                  }
+                  draggingAtMs={
+                    keyframeDrag?.animationId === animation.id ? keyframeDrag.previewAtMs : null
+                  }
+                  popoverIndex={
+                    keyframePopover?.animationId === animation.id ? keyframePopover.index : null
+                  }
+                  onAddKeyframe={(atMs) => {
+                    const sampled = sampleAnimation(animation, atMs);
+                    onUpsertKeyframe(animation.property, atMs, sampled, 'linear');
+                  }}
+                  onStartKeyframeDrag={(index, pointerEvent) => {
+                    const lane = (pointerEvent.currentTarget as HTMLElement).closest(
+                      '.timeline__prop-lane',
+                    ) as HTMLElement | null;
+                    const laneWidth = lane?.getBoundingClientRect().width ?? 1;
+                    setKeyframeDrag({
+                      animationId: animation.id,
+                      index,
+                      startClientX: pointerEvent.clientX,
+                      startAtMs: animation.keyframes[index].at,
+                      laneWidthPx: laneWidth,
+                      previewAtMs: animation.keyframes[index].at,
+                    });
+                    setKeyframePopover({ animationId: animation.id, index });
+                  }}
+                  onClickKeyframe={(index) => setKeyframePopover({ animationId: animation.id, index })}
+                  onClosePopover={() => setKeyframePopover(null)}
+                  onSetValue={(index, value) => onSetKeyframeValue(animation, index, value)}
+                  onSetEasing={(index, easing) => onSetKeyframeEasing(animation, index, easing)}
+                  onRemoveKeyframe={(index) => {
+                    onRemoveKeyframe(animation, index);
+                    setKeyframePopover(null);
+                  }}
+                  onRemoveAnimation={() => {
+                    onRemoveAnimation(animation);
+                    setKeyframePopover(null);
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {drag?.snapTargetMs !== null && drag?.snapTargetMs !== undefined && (
             <div
               className="timeline__snap-guide"
@@ -736,6 +852,173 @@ function Marquee({ state, containerRef }: MarqueeProps) {
       style={{ left, top, width, height }}
       aria-hidden="true"
     />
+  );
+}
+
+type PropertyTrackProps = {
+  animation: PropertyAnimation;
+  sceneDuration: number;
+  draggingIndex: number | null;
+  draggingAtMs: number | null;
+  popoverIndex: number | null;
+  onAddKeyframe: (atMs: number) => void;
+  onStartKeyframeDrag: (index: number, pointerEvent: React.PointerEvent) => void;
+  onClickKeyframe: (index: number) => void;
+  onClosePopover: () => void;
+  onSetValue: (index: number, value: number) => void;
+  onSetEasing: (index: number, easing: EasingKind) => void;
+  onRemoveKeyframe: (index: number) => void;
+  onRemoveAnimation: () => void;
+};
+
+const EASING_OPTIONS: EasingKind[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold'];
+
+function PropertyTrack({
+  animation,
+  sceneDuration,
+  draggingIndex,
+  draggingAtMs,
+  popoverIndex,
+  onAddKeyframe,
+  onStartKeyframeDrag,
+  onClickKeyframe,
+  onClosePopover,
+  onSetValue,
+  onSetEasing,
+  onRemoveKeyframe,
+  onRemoveAnimation,
+}: PropertyTrackProps) {
+  const popoverFrame = popoverIndex !== null ? animation.keyframes[popoverIndex] : null;
+  return (
+    <div className="timeline__prop-row" data-property={animation.property}>
+      <span className="timeline__prop-name">{animation.property}</span>
+      <span className="timeline__prop-meta">{animation.keyframes.length}kf</span>
+      <div
+        className="timeline__prop-lane"
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest('.timeline__keyframe, .timeline__keyframe-popover')) return;
+          const lane = event.currentTarget as HTMLElement;
+          const rect = lane.getBoundingClientRect();
+          const ratio = (event.clientX - rect.left) / Math.max(1, rect.width);
+          onAddKeyframe(clampMs(ratio * sceneDuration, 0, sceneDuration));
+        }}
+      >
+        {animation.keyframes.map((frame, index) => {
+          const liveAt = draggingIndex === index && draggingAtMs !== null ? draggingAtMs : frame.at;
+          const left = (liveAt / sceneDuration) * 100;
+          const easingClass = `timeline__keyframe--${frame.easing}`;
+          return (
+            <button
+              key={`${animation.id}-${index}`}
+              type="button"
+              className={`timeline__keyframe ${easingClass} ${
+                popoverIndex === index ? 'timeline__keyframe--active' : ''
+              }`}
+              style={{ left: `${left}%` }}
+              aria-label={`${animation.property} keyframe ${index + 1} of ${animation.keyframes.length} at ${Math.round(frame.at)}ms, value ${frame.value}, easing ${frame.easing}`}
+              title={`${frame.value} @ ${Math.round(frame.at)}ms (${frame.easing})`}
+              onPointerDown={(pointerEvent) => {
+                pointerEvent.stopPropagation();
+                onStartKeyframeDrag(index, pointerEvent);
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClickKeyframe(index);
+              }}
+            />
+          );
+        })}
+        {popoverFrame !== null && popoverIndex !== null && (
+          <KeyframePopover
+            frame={popoverFrame}
+            index={popoverIndex}
+            position={(popoverFrame.at / sceneDuration) * 100}
+            onClose={onClosePopover}
+            onSetValue={(value) => onSetValue(popoverIndex, value)}
+            onSetEasing={(easing) => onSetEasing(popoverIndex, easing)}
+            onRemove={() => onRemoveKeyframe(popoverIndex)}
+          />
+        )}
+      </div>
+      <button
+        type="button"
+        className="timeline__prop-remove"
+        aria-label={`Remove ${animation.property} animation`}
+        title={`Remove ${animation.property} animation`}
+        onClick={onRemoveAnimation}
+      >
+        <X size={11} />
+      </button>
+    </div>
+  );
+}
+
+type KeyframePopoverProps = {
+  frame: PropertyKeyframe;
+  index: number;
+  position: number;
+  onClose: () => void;
+  onSetValue: (value: number) => void;
+  onSetEasing: (easing: EasingKind) => void;
+  onRemove: () => void;
+};
+
+function KeyframePopover({ frame, index, position, onClose, onSetValue, onSetEasing, onRemove }: KeyframePopoverProps) {
+  const [draftValue, setDraftValue] = useState(String(frame.value));
+  useEffect(() => {
+    setDraftValue(String(frame.value));
+  }, [frame.value, index]);
+  const popoverId = useId();
+
+  return (
+    <div
+      className="timeline__keyframe-popover"
+      role="dialog"
+      aria-label={`Edit keyframe ${index + 1}`}
+      style={{ left: `${position}%` }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <header>
+        <strong>{Math.round(frame.at)}ms</strong>
+        <button type="button" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <label className="timeline__keyframe-field">
+        <span>value</span>
+        <input
+          id={popoverId}
+          type="number"
+          step="any"
+          value={draftValue}
+          onChange={(event) => setDraftValue(event.target.value)}
+          onBlur={() => {
+            const next = Number(draftValue);
+            if (Number.isFinite(next) && next !== frame.value) onSetValue(next);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              const next = Number(draftValue);
+              if (Number.isFinite(next) && next !== frame.value) onSetValue(next);
+            }
+          }}
+        />
+      </label>
+      <label className="timeline__keyframe-field">
+        <span>easing</span>
+        <select value={frame.easing} onChange={(event) => onSetEasing(event.target.value as EasingKind)}>
+          {EASING_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button type="button" icon={<Trash2 size={11} />} onClick={onRemove}>
+        delete
+      </Button>
+    </div>
   );
 }
 
