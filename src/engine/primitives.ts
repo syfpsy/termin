@@ -39,9 +39,12 @@ export function evaluateScene(scene: ParsedScene, grid: Grid, tick: number, tick
   const ctx: PrimitiveContext = { grid, scene, timeMs, tick, tickRate, layout, intensityScale: 1 };
   const hasSolo = scene.events.some((event) => event.flags.solo && !event.flags.muted);
   for (const event of scene.events) {
-    if (timeMs < event.at) continue;
     if (event.flags.muted) continue;
     if (hasSolo && !event.flags.solo) continue;
+    // Sample any per-event timing offset (animatable). The keyframe track is
+    // sampled at the un-shifted timeMs so the offset value is itself stable.
+    const offset = sampleEventParam(scene.animations, event.line, 'offset', timeMs, 0);
+    if (timeMs < event.at + offset) continue;
     ctx.intensityScale = sampleEventParam(scene.animations, event.line, 'intensity', timeMs, 1);
     applyPrimitive(event, ctx);
   }

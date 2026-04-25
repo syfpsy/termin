@@ -822,7 +822,10 @@ export function Timeline(props: TimelineProps) {
         </div>
       </div>
 
-      {selectedEvent && (
+      {/* Inline drawer only opens for multi-selection ops (rescale, batch
+          copy/cut/paste). Single-event editing lives in the Effect Controls
+          panel on the left rail. */}
+      {selectedEvent && selectedEvents.length > 1 && (
         <EventEditor
           event={selectedEvent}
           rate={rate}

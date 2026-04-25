@@ -354,10 +354,17 @@ input {
   background: var(--accent-soft);
 }
 
-.brand__mark,
-.panel__signal {
+.brand__mark {
   width: 7px;
   height: 7px;
+  background: currentColor;
+  box-shadow: var(--glow-phos);
+  display: inline-block;
+}
+
+.panel__signal {
+  width: 5px;
+  height: 5px;
   background: currentColor;
   box-shadow: var(--glow-phos);
   display: inline-block;
@@ -537,28 +544,46 @@ input {
 }
 
 .panel__bar {
-  min-height: 28px;
+  min-height: 18px;
   background: var(--bg);
   border-bottom: 1px solid var(--bezel);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 1px 8px;
 }
 
 .panel__title,
 .panel__tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
+/* Tools sit in the slim header; their default 24px button height was
+   pushing the entire bar to 27px. Shrink to match the title baseline. */
+.panel__tools .button {
+  block-size: 16px;
+  min-block-size: 16px;
+  padding-block: 0;
+  padding-inline: 4px;
+  font-size: 9px;
+}
+
+.panel__tools .button .button__icon svg {
+  inline-size: 11px;
+  block-size: 11px;
+}
+
 .panel__title {
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  /* Slim sans-serif for chrome — distinct from VT323 terminal content */
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--ink-muted);
 }
 
 .panel__toggle {
@@ -566,12 +591,12 @@ input {
   background: transparent;
   border: 0;
   color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
+  /* Inherit font props from .panel__title (the button carries both classes
+     in the markup). Do NOT use `font: inherit` — that resets back to the
+     body's terminal mono and undoes the slim sans header. */
   cursor: pointer;
-  padding: 2px 4px 2px 0;
-  margin: -2px 0 -2px -4px;
+  padding: 1px 2px 1px 0;
+  margin: 0 0 0 -2px;
   border-radius: 2px;
 }
 
@@ -590,9 +615,9 @@ input {
 
 .panel__chevron {
   display: inline-block;
-  inline-size: 10px;
-  font-size: 9px;
-  color: var(--ink-muted);
+  inline-size: 8px;
+  font-size: 8px;
+  color: var(--ink-faint);
   text-align: center;
   flex: 0 0 auto;
 }
@@ -619,8 +644,10 @@ input {
 }
 
 .panel__flags {
-  color: var(--ink-muted);
-  margin-left: 4px;
+  color: var(--ink-faint);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  margin-left: 3px;
 }
 
 .panel__body {
@@ -2462,6 +2489,209 @@ input {
   justify-content: space-between;
   gap: 6px;
   margin-block-start: 4px;
+}
+
+/* ---- titlebar menu (AE-style) ---- */
+
+.titlebar-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.titlebar-menu__trigger {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink-muted);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.titlebar-menu__trigger:hover,
+.titlebar-menu[data-open] .titlebar-menu__trigger {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.titlebar-menu__panel {
+  position: absolute;
+  top: calc(100% + 2px);
+  z-index: 40;
+  min-inline-size: 220px;
+  max-inline-size: 280px;
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  padding: 4px 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.titlebar-menu__panel--left {
+  inset-inline-start: 0;
+}
+
+.titlebar-menu__panel--right {
+  inset-inline-end: 0;
+}
+
+.titlebar-menu__preface {
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--bezel);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.titlebar-menu__preface-label {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.titlebar-menu__preface strong {
+  color: var(--amber);
+  text-shadow: var(--glow-amber);
+  font-weight: 500;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-menu__divider {
+  block-size: 1px;
+  background: var(--bezel);
+  margin: 4px 0;
+}
+
+.titlebar-menu__header {
+  padding: 6px 12px 2px;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.titlebar-menu__item {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  inline-size: 100%;
+  text-align: start;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-feature-settings: 'tnum';
+}
+
+.titlebar-menu__item:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.titlebar-menu__item:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.titlebar-menu__item--danger {
+  color: var(--red);
+}
+
+.titlebar-menu__item kbd {
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+}
+
+/* ---- cloud panel ---- */
+
+.cloud-panel {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-panel__lede,
+.cloud-panel__note {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.cloud-panel__signin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-panel__label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cloud-panel__label span {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.cloud-panel__label input {
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.cloud-panel__label input:focus {
+  outline: 1px solid var(--cyan);
+  outline-offset: -1px;
+}
+
+.cloud-panel__signed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cloud-panel__identity {
+  font-size: 10px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cloud-panel .button {
+  justify-content: flex-start;
+  inline-size: 100%;
+}
+
+.slider-row__keyframe--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .surface-stage {

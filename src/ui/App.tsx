@@ -73,6 +73,7 @@ import {
   addAsset,
   addScene,
   duplicateScene as duplicateProjectScene,
+  makeEmptyProject,
   patchAsset,
   patchScene,
   removeAsset,
@@ -112,6 +113,8 @@ import {
 import { ProjectPanel } from './ProjectPanel';
 import { AssetPanel } from './AssetPanel';
 import { EffectControlsPanel } from './EffectControlsPanel';
+import { TitlebarMenu } from './TitlebarMenu';
+import { CloudPanel } from './CloudPanel';
 import { Timeline } from './Timeline';
 
 type AppView =
@@ -689,6 +692,27 @@ export function App() {
     applyProject({ ...flushed, name, updatedAt: new Date().toISOString() });
   }
 
+  function handleNewProject() {
+    if (!project) return;
+    const name = window.prompt('New project name', 'Untitled project');
+    if (!name || !name.trim()) return;
+    // Flush current state before swapping out so we don't lose pending edits.
+    flushActiveScene(project);
+    const fresh = makeEmptyProject(name.trim(), DEFAULT_DSL, 'untitled_scene');
+    applyProject(fresh);
+    writeActiveProjectId(fresh.id);
+    const active = fresh.scenes[0];
+    if (active) {
+      setDsl(active.dsl);
+      setPreviewDsl(null);
+      setPast([]);
+      setFuture([]);
+      setSelectedEventIds(new Set());
+      setTick(0);
+      setView('author');
+    }
+  }
+
   /* ---------- assets ---------- */
 
   function addAssetToProject(body: ProjectAssetBody, name: string) {
@@ -972,7 +996,7 @@ export function App() {
   );
 
   const upsertEventKeyframeAt = useCallback(
-    (event: SceneEvent, param: 'intensity', atMs: number, value: number, easing: EasingKind = 'linear') => {
+    (event: SceneEvent, param: 'intensity' | 'offset', atMs: number, value: number, easing: EasingKind = 'linear') => {
       const existing = scene.animations.find(
         (animation) => animation.property === param && animation.eventLine === event.line,
       );
@@ -1210,6 +1234,46 @@ export function App() {
           <span className="brand__mark" aria-hidden="true" />
           <span>PHOSPHOR</span>
         </h1>
+        {project && (
+          <TitlebarMenu
+            label="File"
+            preface={
+              <div className="titlebar-menu__preface">
+                <span className="titlebar-menu__preface-label">project</span>
+                <strong>{project.name}</strong>
+              </div>
+            }
+            items={[
+              { kind: 'item', label: 'New project', onSelect: handleNewProject },
+              { kind: 'item', label: 'Open project…', shortcut: '⌘O', onSelect: () => fileInputRef.current?.click() },
+              { kind: 'item', label: 'Save project', shortcut: '⌘S', onSelect: exportProjectFile },
+              { kind: 'divider' },
+              { kind: 'header', label: 'scenes' },
+              ...project.scenes.map((s) => ({
+                kind: 'item' as const,
+                label: s.id === project.activeSceneId ? `● ${s.name}` : `   ${s.name}`,
+                onSelect: () => selectSceneById(s.id),
+              })),
+              { kind: 'divider' },
+              { kind: 'item', label: 'New scene', shortcut: '⌘N', onSelect: addEmptyScene },
+              {
+                kind: 'item',
+                label: 'Rename project…',
+                onSelect: () => {
+                  const next = window.prompt('Project name', project.name);
+                  if (next && next.trim() && next.trim() !== project.name) renameProject(next.trim());
+                },
+              },
+              { kind: 'divider' },
+              { kind: 'item', label: 'Export .me', shortcut: '⌘⇧E', onSelect: () => exportMeFile(scene.name, dsl) },
+              {
+                kind: 'item',
+                label: 'Export HTML embed',
+                onSelect: () => exportHtmlEmbed(scene.name, dsl, appearance),
+              },
+            ]}
+          />
+        )}
         <nav className="view-nav" aria-label="Phosphor surfaces">
           {NAV_ITEMS.map((item) => (
             <button
@@ -1296,6 +1360,16 @@ export function App() {
                 onApplyAtPlayhead={applyAssetAtPlayhead}
               />
             )}
+            <EffectControlsPanel
+              event={selectedEvents.length === 1 ? selectedEvents[0] : null}
+              scene={scene}
+              rate={appearance.tickRate}
+              playheadMs={Math.round((tick / appearance.tickRate) * 1000)}
+              onPatchEvent={patchEvent}
+              onDeleteEvent={deleteEvent}
+              onUpsertEventKeyframe={upsertEventKeyframeAt}
+              onRemoveAnimation={removeAnimation}
+            />
             <DirectorPanel
               dsl={dsl}
               provider={provider}
@@ -1419,16 +1493,10 @@ export function App() {
             className="splitter--col-right"
           />
 
-          <aside className="right-stack" aria-label="Effect controls, library, and effects">
-            <EffectControlsPanel
-              event={selectedEvents.length === 1 ? selectedEvents[0] : null}
-              scene={scene}
-              rate={appearance.tickRate}
-              playheadMs={Math.round((tick / appearance.tickRate) * 1000)}
-              onPatchEvent={patchEvent}
-              onDeleteEvent={deleteEvent}
-              onUpsertEventKeyframe={upsertEventKeyframeAt}
-              onRemoveAnimation={removeAnimation}
+          <aside className="right-stack" aria-label="Cloud, library, and effects">
+            <CloudPanel
+              onSaveCurrentToCloud={exportProjectFile}
+              onBrowsePhosphorLibrary={() => setView('library')}
             />
             <SceneLibrary onFork={forkLibraryScene} />
 

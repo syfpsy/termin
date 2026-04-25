@@ -26,6 +26,7 @@ type EffectControlsProps = {
     param: AnimatableEventParam,
     atMs: number,
     value: number,
+    easing?: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold',
   ) => void;
   onRemoveAnimation: (animation: PropertyAnimation) => void;
 };
@@ -123,8 +124,13 @@ function EffectControlsBody({
   const intensityAnim = scene.animations.find(
     (anim) => anim.eventLine === event.line && anim.property === 'intensity',
   );
+  const offsetAnim = scene.animations.find(
+    (anim) => anim.eventLine === event.line && anim.property === 'offset',
+  );
   const isIntensityAnimated = Boolean(intensityAnim);
+  const isOffsetAnimated = Boolean(offsetAnim);
   const sampledIntensity = sampleEventParam(scene.animations, event.line, 'intensity', playheadMs, 1);
+  const sampledOffset = sampleEventParam(scene.animations, event.line, 'offset', playheadMs, 0);
 
   return (
     <div className="effect-controls">
@@ -145,7 +151,7 @@ function EffectControlsBody({
         />
       </div>
 
-      <div className="effect-controls__row">
+      <div className="effect-controls__row effect-controls__row--animatable">
         <label htmlFor={`${formId}-target`}>target</label>
         <input
           id={`${formId}-target`}
@@ -158,6 +164,42 @@ function EffectControlsBody({
             if (target !== event.target) onPatchEvent(event, { target });
           }}
         />
+        <span aria-hidden />
+        <button
+          type="button"
+          className="slider-row__keyframe slider-row__keyframe--disabled"
+          aria-label="Animate target text — coming soon"
+          aria-disabled
+          title="String-valued keyframes for target text are coming next iteration"
+          disabled
+        >
+          ◆
+        </button>
+      </div>
+
+      <div className="effect-controls__row effect-controls__row--animatable">
+        <label htmlFor={`${formId}-offset`}>offset (ms)</label>
+        <input
+          id={`${formId}-offset`}
+          type="range"
+          min={-2000}
+          max={2000}
+          step={Math.round(1000 / rate)}
+          value={sampledOffset}
+          aria-valuetext={`${sampledOffset.toFixed(0)}ms`}
+          onChange={(e) => onUpsertEventKeyframe(event, 'offset', playheadMs, Number(e.target.value))}
+        />
+        <strong className="effect-controls__display">{Math.round(sampledOffset)}ms</strong>
+        <button
+          type="button"
+          className={`slider-row__keyframe ${isOffsetAnimated ? 'slider-row__keyframe--on' : ''}`}
+          aria-label="Add offset keyframe at playhead"
+          aria-pressed={isOffsetAnimated}
+          title="Animate timing — adds a keyframe at the playhead with the current offset"
+          onClick={() => onUpsertEventKeyframe(event, 'offset', playheadMs, sampledOffset)}
+        >
+          ◆
+        </button>
       </div>
 
       <div className="effect-controls__row">

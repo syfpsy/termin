@@ -279,7 +279,7 @@ function parsePropLine(
       return { error: `Expected an animatable parameter after ${target}.` };
     }
     if (!isAnimatableEventParam(param)) {
-      return { error: `Unknown event parameter: ${param}. Available: intensity.` };
+      return { error: `Unknown event parameter: ${param}. Available: intensity, offset.` };
     }
     const keyframes = parseKeyframeList(tokens.slice(1).join(' '));
     if (keyframes.length === 0) {

@@ -104,7 +104,16 @@ export type AnimatableAppearanceProp =
   | 'chromatic'
   | 'sizeScale';
 
-export type AnimatableEventParam = 'intensity';
+/**
+ * Per-event numeric tracks that the renderer samples before drawing each
+ * event. New params are additive — old scenes ignore them, new player
+ * versions read them.
+ *
+ * - intensity: 0..1 multiplier on the event's brightness.
+ * - offset:    delay (ms) added to the event's nominal start time. Lets
+ *              the timing of a clip "wobble" without rewriting the line.
+ */
+export type AnimatableEventParam = 'intensity' | 'offset';
 
 export type PropertyAnimation = {
   id: string;
@@ -126,7 +135,7 @@ export const ANIMATABLE_APPEARANCE_PROPS: AnimatableAppearanceProp[] = [
   'sizeScale',
 ];
 
-export const ANIMATABLE_EVENT_PARAMS: AnimatableEventParam[] = ['intensity'];
+export const ANIMATABLE_EVENT_PARAMS: AnimatableEventParam[] = ['intensity', 'offset'];
 
 export function isAnimatableAppearanceProp(name: string): name is AnimatableAppearanceProp {
   return (ANIMATABLE_APPEARANCE_PROPS as string[]).includes(name);
