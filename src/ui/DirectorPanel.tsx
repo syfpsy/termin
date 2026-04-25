@@ -164,7 +164,7 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
       }
       footer="Ctrl+Enter run · preview does not commit"
     >
-      <div className="director-log">
+      <div className="director-log" role="log" aria-live="polite" aria-label="Director conversation">
         {messages.map((message) => (
           <div key={message.id} className={`chat-turn chat-turn--${message.role}`}>
             <div className="chat-turn__meta">

@@ -42,6 +42,9 @@ export async function requestDirector(request: DirectorRequest): Promise<Directo
   }
 
   const json = (await response.json()) as Omit<DirectorProposal, 'id'>;
+  if (!json || typeof json.dsl !== 'string') {
+    throw new Error('Director returned an invalid proposal (missing dsl field).');
+  }
   return {
     id: crypto.randomUUID(),
     ...json,

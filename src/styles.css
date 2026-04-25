@@ -99,6 +99,11 @@ input {
   }
 }
 
+@keyframes phos-pulse {
+  0%, 100% { opacity: 1; box-shadow: var(--glow-cyan); }
+  50%       { opacity: 0.25; box-shadow: none; }
+}
+
 /* Soft fade at the bottom of overflowing panels — recovers the "more here" affordance lost to invisible scrollbars. */
 .scroll-fade {
   mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
@@ -826,6 +831,7 @@ input {
   height: 6px;
   background: var(--cyan);
   box-shadow: var(--glow-cyan);
+  animation: phos-pulse 1.1s ease-in-out infinite;
 }
 
 .director-error {
@@ -836,7 +842,7 @@ input {
 
 .proposal-card {
   border: 1px solid var(--bezel);
-  background: #0a0e0b;
+  background: var(--bg);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -1048,7 +1054,7 @@ input {
   overflow: auto;
   margin-top: 8px;
   border: 1px solid var(--bezel);
-  background: #0a0e0b;
+  background: var(--bg);
 }
 
 .parsed-line {
