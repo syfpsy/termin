@@ -877,6 +877,8 @@ at 0ms type "{{users}}/{{ghost}}"`);
   assert.equal(withTwo.activeSceneId, withTwo.scenes[1].id, 'add switches active');
 
   // patchScene updates fields and bumps updatedAt
+  // Wait a millisecond so two ISO timestamps don't collide on fast machines.
+  await new Promise((r) => setTimeout(r, 2));
   const patched = patchScene(withTwo, withTwo.scenes[0].id, { name: 'renamed', dsl: 'scene renamed 1s' });
   assert.equal(patched.scenes[0].name, 'renamed');
   assert.equal(patched.scenes[0].dsl, 'scene renamed 1s');

@@ -713,6 +713,23 @@ export function App() {
     }
   }
 
+  /** Replace the active project with one fetched from Supabase. */
+  function loadProjectFromCloud(next: Project) {
+    flushActiveScene(project);
+    applyProject(next);
+    writeActiveProjectId(next.id);
+    const active = next.scenes.find((s) => s.id === next.activeSceneId) ?? next.scenes[0];
+    if (active) {
+      setDsl(active.dsl);
+      setPreviewDsl(null);
+      setPast([]);
+      setFuture([]);
+      setSelectedEventIds(new Set());
+      setTick(0);
+      setView('author');
+    }
+  }
+
   /* ---------- assets ---------- */
 
   function addAssetToProject(body: ProjectAssetBody, name: string) {
@@ -1495,8 +1512,9 @@ export function App() {
 
           <aside className="right-stack" aria-label="Cloud, library, and effects">
             <CloudPanel
-              onSaveCurrentToCloud={exportProjectFile}
-              onBrowsePhosphorLibrary={() => setView('library')}
+              project={project}
+              onProjectFromCloud={loadProjectFromCloud}
+              onError={(message) => setImportError(message)}
             />
             <SceneLibrary onFork={forkLibraryScene} />
 

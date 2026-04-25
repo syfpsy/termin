@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.64.0",
+    "@supabase/supabase-js": "^2.104.1",
     "gifenc": "^1.0.3",
     "lucide-react": "^0.468.0",
     "openai": "^6.8.1",
