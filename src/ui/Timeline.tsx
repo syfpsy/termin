@@ -1,7 +1,8 @@
 import { Eye, EyeOff, Flag, History, Lock, Plus, Redo2, ShipWheel, Trash2, Undo2, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { estimateEventDuration, eventTone } from '../engine/dsl';
-import { inferDisplayDuration, isResizable, type FlagName } from '../engine/dslEdit';
+import { inferDisplayDuration, isResizable, setDurationModifier, type FlagName } from '../engine/dslEdit';
+import { TONE_HEX } from '../engine/tones';
 import { sampleAnimation } from '../engine/keyframes';
 import type {
   AnimatableAppearanceProp,
@@ -34,22 +35,6 @@ const ADDABLE_EFFECTS: Array<{ value: string; label: string; category: string }>
 ];
 
 const TONE_CHOICES: ToneName[] = ['phos', 'amber', 'green', 'red', 'cyan', 'magenta'];
-
-const TONE_HEX_PREVIEW: Record<ToneName, string> = {
-  phos: '#D6F04A',
-  phosDim: '#8aa028',
-  amber: '#FFA94B',
-  amberDim: '#a86a2a',
-  green: '#7FE093',
-  red: '#FF6B6B',
-  cyan: '#7FE3E0',
-  magenta: '#E77FD9',
-  ink: '#CDDDA0',
-  inkDim: '#7A8F56',
-  inkMuted: '#7e8d56',
-  inkFaint: '#2f3a22',
-  ink2: '#FFC985',
-};
 
 type TimelineUnits = 'frame' | 'ms';
 
@@ -113,7 +98,7 @@ type KeyframeDragState = {
   previewAtMs: number;
 };
 
-type DragKind = 'move' | 'resize' | 'group-move';
+type DragKind = 'move' | 'resize' | 'group-move' | 'left-resize';
 
 type DragState = {
   kind: DragKind;
@@ -134,6 +119,55 @@ type MarqueeState = {
   currentClientX: number;
   currentClientY: number;
 };
+
+// Intro/outro transition handles
+// Add new transition type names here to extend the library:
+const TRANSITION_TYPES = ['fade', 'wipe', 'slide', 'glitch', 'scan'] as const;
+
+type TransitionSpec = {
+  type: string;
+  durationMs: number;
+};
+
+type TransitionDragState = {
+  eventId: string;
+  which: 'intro' | 'outro';
+  barDurationMs: number;
+  startClientX: number;
+  startDurationMs: number;
+  laneWidthPx: number;
+  previewDurationMs: number;
+};
+
+type TransitionPopoverState = {
+  eventId: string;
+  which: 'intro' | 'outro';
+};
+
+function parseEventTransitions(modifiers: string): { intro: TransitionSpec | null; outro: TransitionSpec | null } {
+  let intro: TransitionSpec | null = null;
+  let outro: TransitionSpec | null = null;
+  for (const token of modifiers.split(/\s+/).filter(Boolean)) {
+    const m = /^(intro|outro):([^:]+)(?::(\d+)ms)?$/.exec(token);
+    if (!m) continue;
+    const spec: TransitionSpec = { type: m[2], durationMs: m[3] ? parseInt(m[3], 10) : 200 };
+    if (m[1] === 'intro') intro = spec;
+    else outro = spec;
+  }
+  return { intro, outro };
+}
+
+function setTransitionInModifiers(
+  modifiers: string,
+  which: 'intro' | 'outro',
+  type: string | null,
+  durationMs: number,
+): string {
+  const tokens = modifiers.split(/\s+/).filter(Boolean);
+  const filtered = tokens.filter((t) => !t.startsWith(`${which}:`));
+  if (type !== null) filtered.push(`${which}:${type}:${Math.round(durationMs)}ms`);
+  return filtered.join(' ');
+}
 
 const MIN_RESIZE_MS = 40;
 const SNAP_THRESHOLD_PX = 6;
@@ -198,6 +232,8 @@ export function Timeline(props: TimelineProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [keyframeDrag, setKeyframeDrag] = useState<KeyframeDragState | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
+  const [transitionDrag, setTransitionDrag] = useState<TransitionDragState | null>(null);
+  const [transitionPopover, setTransitionPopover] = useState<TransitionPopoverState | null>(null);
   const [adderAt, setAdderAt] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [keyframePopover, setKeyframePopover] = useState<{ animationId: string; index: number } | null>(null);
@@ -262,6 +298,17 @@ export function Timeline(props: TimelineProps) {
           previewDurationMs: Math.max(MIN_RESIZE_MS, targetEnd - drag.startAtMs),
           snapTargetMs: snapped.matched,
         });
+      } else if (drag.kind === 'left-resize') {
+        const endMs = drag.startAtMs + drag.startDurationMs;
+        const proposed = Math.max(0, Math.min(endMs - MIN_RESIZE_MS, drag.startAtMs + deltaMs));
+        const snapped = snap(proposed, drag.laneWidthPx);
+        const snappedAt = Math.max(0, Math.min(endMs - MIN_RESIZE_MS, snapped.value));
+        setDrag({
+          ...drag,
+          previewAtMs: snappedAt,
+          previewDurationMs: endMs - snappedAt,
+          snapTargetMs: snapped.matched,
+        });
       } else if (drag.kind === 'group-move') {
         const proposed = drag.startAtMs + deltaMs;
         const snapped = snap(proposed, drag.laneWidthPx);
@@ -278,6 +325,12 @@ export function Timeline(props: TimelineProps) {
         if (drag.kind === 'resize' && drag.previewDurationMs !== drag.startDurationMs) {
           onResizeEvent(target, drag.previewDurationMs);
         }
+        if (drag.kind === 'left-resize' && drag.previewAtMs !== drag.startAtMs) {
+          onPatchEvent(target, {
+            atMs: drag.previewAtMs,
+            modifiers: setDurationModifier(target.modifiers, drag.previewDurationMs),
+          });
+        }
         if (drag.kind === 'group-move' && drag.groupDeltaMs !== 0) {
           onMoveEvents(selectedEvents, drag.groupDeltaMs);
         }
@@ -292,7 +345,7 @@ export function Timeline(props: TimelineProps) {
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, onMoveEvent, onMoveEvents, onResizeEvent, scene.duration, scene.events, selectedEvents, snap]);
+  }, [drag, onMoveEvent, onMoveEvents, onPatchEvent, onResizeEvent, scene.duration, scene.events, selectedEvents, snap]);
 
   // Keyframe drag — moves a single keyframe along its property track
   useEffect(() => {
@@ -325,6 +378,48 @@ export function Timeline(props: TimelineProps) {
     };
   }, [keyframeDrag, onMoveKeyframe, scene.animations, scene.duration, snap]);
 
+  // Transition intro/outro drag
+  useEffect(() => {
+    if (!transitionDrag) return;
+    const onMove = (ev: PointerEvent) => {
+      const deltaPx = ev.clientX - transitionDrag.startClientX;
+      const deltaMs = (deltaPx / Math.max(1, transitionDrag.laneWidthPx)) * scene.duration;
+      const signedDelta = transitionDrag.which === 'intro' ? deltaMs : -deltaMs;
+      const next = Math.max(20, Math.min(transitionDrag.barDurationMs * 0.5, transitionDrag.startDurationMs + signedDelta));
+      setTransitionDrag({ ...transitionDrag, previewDurationMs: Math.round(next) });
+    };
+    const onUp = () => {
+      const target = scene.events.find((e) => e.id === transitionDrag.eventId);
+      if (target) {
+        const moved = Math.abs(transitionDrag.previewDurationMs - transitionDrag.startDurationMs) > 10;
+        if (moved) {
+          const transitions = parseEventTransitions(target.modifiers);
+          const spec = transitionDrag.which === 'intro' ? transitions.intro : transitions.outro;
+          if (spec) {
+            const newMods = setTransitionInModifiers(
+              target.modifiers,
+              transitionDrag.which,
+              spec.type,
+              transitionDrag.previewDurationMs,
+            );
+            onPatchEvent(target, { modifiers: newMods });
+          }
+        } else {
+          setTransitionPopover({ eventId: target.id, which: transitionDrag.which });
+        }
+      }
+      setTransitionDrag(null);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+    return () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+  }, [transitionDrag, scene.events, scene.duration, onPatchEvent]);
+
   // Marquee drag (box-select)
   useEffect(() => {
     if (!marquee) return;
@@ -341,20 +436,44 @@ export function Timeline(props: TimelineProps) {
         setMarquee(null);
         return;
       }
+      // Single layout read for the container — all subsequent comparisons use
+      // offsetTop (layout-local) for Y and time arithmetic for X, avoiding
+      // per-event getBoundingClientRect calls.
       const tracksRect = tracks.getBoundingClientRect();
-      const x1 = Math.min(marquee.startClientX, marquee.currentClientX);
-      const x2 = Math.max(marquee.startClientX, marquee.currentClientX);
-      const y1 = Math.min(marquee.startClientY, marquee.currentClientY);
-      const y2 = Math.max(marquee.startClientY, marquee.currentClientY);
+      const scrollTop = tracks.scrollTop;
+
+      // Marquee bounds in viewport space
+      const mx1 = Math.min(marquee.startClientX, marquee.currentClientX);
+      const mx2 = Math.max(marquee.startClientX, marquee.currentClientX);
+      const my1 = Math.min(marquee.startClientY, marquee.currentClientY);
+      const my2 = Math.max(marquee.startClientY, marquee.currentClientY);
+
+      // Determine where the lane (draggable area) starts — read once from the
+      // first available lane element, fall back to the hardcoded label width.
+      const firstLane = tracks.querySelector<HTMLElement>('.timeline__lane');
+      const laneRect = firstLane?.getBoundingClientRect() ?? null;
+      const laneLeft = laneRect?.left ?? tracksRect.left + 170;
+      const laneWidth = Math.max(1, laneRect?.width ?? tracksRect.width - 170);
+
+      // Convert viewport X to millisecond range
+      const timeStart = Math.max(0, ((mx1 - laneLeft) / laneWidth) * scene.duration);
+      const timeEnd = Math.min(scene.duration, ((mx2 - laneLeft) / laneWidth) * scene.duration);
+
       const ids: string[] = [];
       for (const row of tracks.querySelectorAll<HTMLElement>('[data-event-id]')) {
-        const bar = row.querySelector<HTMLElement>('.timeline__bar');
-        if (!bar) continue;
-        const rect = bar.getBoundingClientRect();
-        if (rect.right < x1 || rect.left > x2) continue;
-        if (rect.bottom < y1 || rect.top > y2) continue;
-        const id = row.dataset.eventId;
-        if (id) ids.push(id);
+        // Y: offsetTop is relative to the tracks container (position: relative)
+        const rowTop = tracksRect.top + row.offsetTop - scrollTop;
+        const rowBottom = rowTop + row.offsetHeight;
+        if (rowBottom < my1 || rowTop > my2) continue;
+
+        // X: compare event time range against marquee time range (no DOM read)
+        const eventId = row.dataset.eventId;
+        const ev = scene.events.find((e) => e.id === eventId);
+        if (!ev) continue;
+        const evEnd = ev.at + inferDisplayDuration(ev, rate);
+        if (evEnd < timeStart || ev.at > timeEnd) continue;
+
+        ids.push(eventId);
       }
       const traveled =
         Math.abs(marquee.currentClientX - marquee.startClientX) > 4 ||
@@ -375,7 +494,7 @@ export function Timeline(props: TimelineProps) {
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
     };
-  }, [marquee, onSelectMany, onSelectOne]);
+  }, [marquee, onSelectMany, onSelectOne, scene.events, scene.duration, rate]);
 
   function startDrag(kind: DragKind, event: SceneEvent, pointerEvent: React.PointerEvent) {
     if (event.flags.locked) return;
@@ -425,6 +544,40 @@ export function Timeline(props: TimelineProps) {
       return;
     }
     startDrag('move', event, pointerEvent);
+  }
+
+  function startTransitionDrag(
+    which: 'intro' | 'outro',
+    event: SceneEvent,
+    pointerEvent: React.PointerEvent,
+    startDurationMs: number,
+  ) {
+    pointerEvent.preventDefault();
+    pointerEvent.stopPropagation();
+    const lane = (pointerEvent.currentTarget as HTMLElement).closest('.timeline__lane') as HTMLElement | null;
+    const laneWidth = lane?.getBoundingClientRect().width ?? 1;
+    setTransitionDrag({
+      eventId: event.id,
+      which,
+      barDurationMs: inferDisplayDuration(event, rate),
+      startClientX: pointerEvent.clientX,
+      startDurationMs,
+      laneWidthPx: laneWidth,
+      previewDurationMs: startDurationMs,
+    });
+  }
+
+  // Compute which row should show the "insert before" indicator during a move drag.
+  // When the dragged event's preview position would place it before a different event,
+  // highlight the boundary so the user can see where it will land on commit.
+  let reorderInsertBeforeId: string | null = null;
+  if (drag?.kind === 'move') {
+    const primaryIdx = scene.events.findIndex((e) => e.id === drag.primaryEventId);
+    const afterEvent = scene.events.find((e) => e.id !== drag.primaryEventId && e.at > drag.previewAtMs);
+    const wouldBeIdx = afterEvent ? scene.events.indexOf(afterEvent) : scene.events.length;
+    if (wouldBeIdx !== primaryIdx && wouldBeIdx !== primaryIdx + 1) {
+      reorderInsertBeforeId = afterEvent?.id ?? null;
+    }
   }
 
   const totalSeconds = scene.duration / 1000;
@@ -619,11 +772,11 @@ export function Timeline(props: TimelineProps) {
             const liveAt =
               drag?.kind === 'group-move' && selectedEventIds.has(event.id)
                 ? clampMs(event.at + drag.groupDeltaMs, 0, scene.duration)
-                : isPrimary && drag.kind === 'move'
+                : isPrimary && (drag.kind === 'move' || drag.kind === 'left-resize')
                   ? drag.previewAtMs
                   : event.at;
             const liveDuration =
-              isPrimary && drag.kind === 'resize'
+              isPrimary && (drag.kind === 'resize' || drag.kind === 'left-resize')
                 ? drag.previewDurationMs
                 : inferDisplayDuration(event, rate);
             const start = (liveAt / scene.duration) * 100;
@@ -633,11 +786,22 @@ export function Timeline(props: TimelineProps) {
             const resizable = isResizable(event.effect) && !event.flags.locked;
             const dragging = isPrimary || (drag?.kind === 'group-move' && selected);
 
+            const { intro: introTransition, outro: outroTransition } = parseEventTransitions(event.modifiers);
+            const liveIntro: TransitionSpec | null =
+              transitionDrag?.eventId === event.id && transitionDrag.which === 'intro' && introTransition
+                ? { ...introTransition, durationMs: transitionDrag.previewDurationMs }
+                : introTransition;
+            const liveOutro: TransitionSpec | null =
+              transitionDrag?.eventId === event.id && transitionDrag.which === 'outro' && outroTransition
+                ? { ...outroTransition, durationMs: transitionDrag.previewDurationMs }
+                : outroTransition;
+
             return (
               <div
                 key={event.id}
                 className={`timeline__row ${selected ? 'timeline__row--selected' : ''} ${event.flags.muted ? 'timeline__row--muted' : ''} ${event.flags.locked ? 'timeline__row--locked' : ''} ${event.flags.solo ? 'timeline__row--solo' : ''}`}
                 data-event-id={event.id}
+                data-insert-before={reorderInsertBeforeId === event.id ? 'true' : undefined}
               >
                 <span className="timeline__row-flags">
                   <button
@@ -693,23 +857,24 @@ export function Timeline(props: TimelineProps) {
                   role="presentation"
                   onClick={(e) => {
                     // Click on empty lane background (not on a bar) → clear selection.
-                    if ((e.target as HTMLElement).closest('.timeline__bar, .timeline__resize')) return;
+                    if ((e.target as HTMLElement).closest('.timeline__bar, .timeline__resize, .timeline__transition-popover')) return;
+                    setTransitionPopover(null);
                     onSelectOne(null);
                   }}
                 >
-                  <span
+                  <button
+                    type="button"
                     className={`timeline__bar ${dragging ? 'timeline__bar--dragging' : ''}`}
                     data-tone={tone}
                     style={{ left: `${start}%`, width: `${Math.max(1.2, length)}%` }}
                     onPointerDown={(pointerEvent) => handleEventPointerDown(event, pointerEvent)}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
+                      setTransitionPopover(null);
                       if (clickEvent.shiftKey || clickEvent.metaKey || clickEvent.ctrlKey) return;
                       onSelectOne(event.id);
                       onScrub(Math.floor((event.at / 1000) * rate));
                     }}
-                    role="button"
-                    tabIndex={0}
                     aria-label={`${event.effect} at ${event.at}ms${event.target ? `, target ${event.target}` : ''}${event.flags.muted ? ', muted' : ''}${event.flags.locked ? ', locked' : ''}`}
                     aria-pressed={selected}
                     onKeyDown={(keyEvent) => {
@@ -718,13 +883,81 @@ export function Timeline(props: TimelineProps) {
                         onSelectOne(event.id);
                       }
                     }}
-                  />
+                  >
+                    {liveIntro && (
+                      <span
+                        className="timeline__transition-wedge timeline__transition-wedge--intro"
+                        style={{ width: `${Math.min(50, (liveIntro.durationMs / liveDuration) * 100)}%` }}
+                        onPointerDown={(e) => startTransitionDrag('intro', event, e, liveIntro.durationMs)}
+                        aria-label={`Intro: ${liveIntro.type} ${liveIntro.durationMs}ms — drag to resize, Enter to edit`}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setTransitionPopover({ eventId: event.id, which: 'intro' });
+                          }
+                        }}
+                      >
+                        <span className="timeline__transition-label">{liveIntro.type}</span>
+                      </span>
+                    )}
+                    {liveOutro && (
+                      <span
+                        className="timeline__transition-wedge timeline__transition-wedge--outro"
+                        style={{ width: `${Math.min(50, (liveOutro.durationMs / liveDuration) * 100)}%` }}
+                        onPointerDown={(e) => startTransitionDrag('outro', event, e, liveOutro.durationMs)}
+                        aria-label={`Outro: ${liveOutro.type} ${liveOutro.durationMs}ms — drag to resize, Enter to edit`}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setTransitionPopover({ eventId: event.id, which: 'outro' });
+                          }
+                        }}
+                      >
+                        <span className="timeline__transition-label">{liveOutro.type}</span>
+                      </span>
+                    )}
+                  </button>
                   <span className="timeline__key" style={{ left: `${start}%` }} aria-hidden="true" />
                   <span
                     className="timeline__key"
                     style={{ left: `${Math.min(100, start + Math.max(1.2, length))}%` }}
                     aria-hidden="true"
                   />
+                  {resizable && (
+                    <span
+                      className="timeline__resize timeline__resize--left"
+                      style={{ left: `${start}%` }}
+                      onPointerDown={(pointerEvent) => startDrag('left-resize', event, pointerEvent)}
+                      role="slider"
+                      aria-label={`Resize left edge of ${event.effect}`}
+                      aria-valuenow={Math.round(liveDuration)}
+                      aria-valuemin={MIN_RESIZE_MS}
+                      aria-valuemax={Math.round(scene.duration)}
+                      tabIndex={0}
+                      onKeyDown={(keyEvent) => {
+                        if (event.flags.locked) return;
+                        const step = keyEvent.shiftKey ? 100 : 10;
+                        const endMs = event.at + liveDuration; // keep right edge fixed
+                        if (keyEvent.key === 'ArrowLeft') {
+                          keyEvent.preventDefault();
+                          const newAt = Math.max(0, event.at - step);
+                          onPatchEvent(event, {
+                            atMs: newAt,
+                            modifiers: setDurationModifier(event.modifiers, endMs - newAt),
+                          });
+                        } else if (keyEvent.key === 'ArrowRight') {
+                          keyEvent.preventDefault();
+                          const newAt = Math.min(endMs - MIN_RESIZE_MS, event.at + step);
+                          onPatchEvent(event, {
+                            atMs: newAt,
+                            modifiers: setDurationModifier(event.modifiers, endMs - newAt),
+                          });
+                        }
+                      }}
+                    />
+                  )}
                   {resizable && (
                     <span
                       className="timeline__resize"
@@ -736,6 +969,35 @@ export function Timeline(props: TimelineProps) {
                       aria-valuemin={MIN_RESIZE_MS}
                       aria-valuemax={Math.round(scene.duration)}
                       tabIndex={0}
+                      onKeyDown={(keyEvent) => {
+                        if (event.flags.locked) return;
+                        const step = keyEvent.shiftKey ? 100 : 10;
+                        if (keyEvent.key === 'ArrowRight') {
+                          keyEvent.preventDefault();
+                          onResizeEvent(event, Math.min(scene.duration - event.at, liveDuration + step));
+                        } else if (keyEvent.key === 'ArrowLeft') {
+                          keyEvent.preventDefault();
+                          onResizeEvent(event, Math.max(MIN_RESIZE_MS, liveDuration - step));
+                        }
+                      }}
+                    />
+                  )}
+                  {transitionPopover?.eventId === event.id && (
+                    <TransitionTypePopover
+                      which={transitionPopover.which}
+                      spec={transitionPopover.which === 'intro' ? introTransition : outroTransition}
+                      position={transitionPopover.which === 'intro' ? start : Math.min(100, start + Math.max(1.2, length))}
+                      onSet={(type, durationMs) => {
+                        const newMods = setTransitionInModifiers(event.modifiers, transitionPopover.which, type, durationMs);
+                        onPatchEvent(event, { modifiers: newMods });
+                        setTransitionPopover(null);
+                      }}
+                      onRemove={() => {
+                        const newMods = setTransitionInModifiers(event.modifiers, transitionPopover.which, null, 0);
+                        onPatchEvent(event, { modifiers: newMods });
+                        setTransitionPopover(null);
+                      }}
+                      onClose={() => setTransitionPopover(null)}
                     />
                   )}
                 </div>
@@ -815,6 +1077,9 @@ export function Timeline(props: TimelineProps) {
             style={{ left: `calc(170px + (100% - 170px) * ${playhead / 100})` }}
             aria-hidden="true"
           />
+          {adderAt !== null && (
+            <EffectPicker atMs={adderAt} onPick={commitAdd} onCancel={() => setAdderAt(null)} />
+          )}
         </div>
       </div>
 
@@ -839,10 +1104,6 @@ export function Timeline(props: TimelineProps) {
           selectedEvents={selectedEvents}
           onClose={() => onSelectOne(null)}
         />
-      )}
-
-      {adderAt !== null && (
-        <EffectPicker atMs={adderAt} onPick={commitAdd} onCancel={() => setAdderAt(null)} />
       )}
 
       {historyOpen && (
@@ -1178,7 +1439,7 @@ function EventEditor({
               aria-checked={detectedTone === tone}
               className="timeline-editor__tone"
               data-active={detectedTone === tone}
-              style={{ backgroundColor: TONE_HEX_PREVIEW[tone] }}
+              style={{ backgroundColor: TONE_HEX[tone] }}
               title={tone}
               onClick={() => {
                 setTone(tone);
@@ -1424,6 +1685,7 @@ function EffectPicker({ atMs, onPick, onCancel }: EffectPickerProps) {
       className="effect-picker"
       role="dialog"
       aria-label="Choose effect to add"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       <header>
@@ -1465,6 +1727,86 @@ function EffectPicker({ atMs, onPick, onCancel }: EffectPickerProps) {
             </div>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+type TransitionTypePopoverProps = {
+  which: 'intro' | 'outro';
+  spec: TransitionSpec | null;
+  position: number; // % offset for left positioning
+  onSet: (type: string, durationMs: number) => void;
+  onRemove: () => void;
+  onClose: () => void;
+};
+
+function TransitionTypePopover({ which, spec, position, onSet, onRemove, onClose }: TransitionTypePopoverProps) {
+  const [draftType, setDraftType] = useState(spec?.type ?? 'fade');
+  const [draftDuration, setDraftDuration] = useState(spec?.durationMs ?? 200);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDraftType(spec?.type ?? 'fade');
+    setDraftDuration(spec?.durationMs ?? 200);
+  }, [spec]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    }
+    function onPointer(e: PointerEvent) {
+      if (!containerRef.current) return;
+      if (e.target instanceof Node && containerRef.current.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`timeline__transition-popover timeline__transition-popover--${which}`}
+      style={{ left: `${position}%` }}
+      role="dialog"
+      aria-label={`${which} transition`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <header>
+        <strong>{which}</strong>
+        <button type="button" aria-label="Close" onClick={onClose}>×</button>
+      </header>
+      <div className="timeline__transition-type-grid">
+        {TRANSITION_TYPES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={draftType === t ? 'is-active' : ''}
+            onClick={() => setDraftType(t)}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <label className="timeline__transition-duration">
+        <span>ms</span>
+        <input
+          type="number"
+          value={draftDuration}
+          min={20}
+          max={2000}
+          step={20}
+          onChange={(e) => setDraftDuration(Number(e.target.value) || 200)}
+        />
+      </label>
+      <div className="timeline__transition-actions">
+        <button type="button" onClick={() => onSet(draftType, draftDuration)}>apply</button>
+        {spec && <button type="button" onClick={onRemove}>remove</button>}
       </div>
     </div>
   );

@@ -17,9 +17,29 @@ export type SoundPreset =
   | 'click'
   | 'blip'
   | 'swish'
-  | 'chime';
+  | 'chime'
+  // Cogmind-style synth presets — add new names here to extend the library:
+  | 'scan'
+  | 'data-burst'
+  | 'process'
+  | 'access'
+  | 'alarm'
+  | 'error'
+  | 'power-up'
+  | 'power-down'
+  | 'boot'
+  | 'ping'
+  | 'complete'
+  | 'glitch-noise'
+  | 'static'
+  | 'charge';
 
-export const SOUND_PRESETS: SoundPreset[] = ['beep-low', 'beep-high', 'click', 'blip', 'swish', 'chime'];
+export const SOUND_PRESETS: SoundPreset[] = [
+  'beep-low', 'beep-high', 'click', 'blip', 'swish', 'chime',
+  'scan', 'data-burst', 'process', 'access', 'alarm', 'error',
+  'power-up', 'power-down', 'boot', 'ping', 'complete',
+  'glitch-noise', 'static', 'charge',
+];
 
 const SOUND_PREFIX = 'sound:';
 
@@ -81,6 +101,126 @@ const PRESET_SPECS: Record<SoundPreset, PresetSpec> = {
     attack: 0.003,
     hold: 0.04,
     release: 0.32,
+    gain: 0.1,
+  },
+  scan: {
+    oscillator: 'sawtooth',
+    frequency: 300,
+    glide: 2400,
+    attack: 0.01,
+    hold: 0.08,
+    release: 0.12,
+    gain: 0.07,
+  },
+  'data-burst': {
+    oscillator: 'square',
+    frequency: 2400,
+    attack: 0.001,
+    hold: 0.004,
+    release: 0.025,
+    gain: 0.2,
+  },
+  process: {
+    oscillator: 'square',
+    frequency: 55,
+    attack: 0.02,
+    hold: 0.12,
+    release: 0.08,
+    gain: 0.15,
+  },
+  access: {
+    oscillator: 'sine',
+    frequency: 1760,
+    glide: 880,
+    attack: 0.005,
+    hold: 0.04,
+    release: 0.08,
+    gain: 0.15,
+  },
+  alarm: {
+    oscillator: 'square',
+    frequency: 660,
+    attack: 0.002,
+    hold: 0.08,
+    release: 0.04,
+    gain: 0.22,
+  },
+  error: {
+    oscillator: 'sawtooth',
+    frequency: 330,
+    glide: 165,
+    attack: 0.005,
+    hold: 0.06,
+    release: 0.12,
+    gain: 0.16,
+  },
+  'power-up': {
+    oscillator: 'sawtooth',
+    frequency: 110,
+    glide: 2200,
+    attack: 0.02,
+    hold: 0.2,
+    release: 0.12,
+    gain: 0.08,
+  },
+  'power-down': {
+    oscillator: 'sawtooth',
+    frequency: 1760,
+    glide: 55,
+    attack: 0.01,
+    hold: 0.22,
+    release: 0.15,
+    gain: 0.08,
+  },
+  boot: {
+    oscillator: 'triangle',
+    frequency: 440,
+    glide: 1760,
+    attack: 0.03,
+    hold: 0.12,
+    release: 0.2,
+    gain: 0.1,
+  },
+  ping: {
+    oscillator: 'sine',
+    frequency: 2640,
+    attack: 0.002,
+    hold: 0.012,
+    release: 0.18,
+    gain: 0.12,
+  },
+  complete: {
+    oscillator: 'triangle',
+    frequency: 1760,
+    attack: 0.003,
+    hold: 0.05,
+    release: 0.3,
+    gain: 0.1,
+  },
+  'glitch-noise': {
+    oscillator: 'square',
+    frequency: 4400,
+    attack: 0.001,
+    hold: 0.008,
+    release: 0.02,
+    gain: 0.18,
+  },
+  static: {
+    oscillator: 'sawtooth',
+    frequency: 8000,
+    glide: 200,
+    attack: 0.001,
+    hold: 0.015,
+    release: 0.04,
+    gain: 0.08,
+  },
+  charge: {
+    oscillator: 'triangle',
+    frequency: 165,
+    glide: 1320,
+    attack: 0.06,
+    hold: 0.18,
+    release: 0.12,
     gain: 0.1,
   },
 };

@@ -34,6 +34,8 @@
   --glow-cyan: 0 0 4px rgba(127, 227, 224, 0.45), 0 0 10px rgba(127, 227, 224, 0.16);
   --glow-red: 0 0 4px rgba(255, 107, 107, 0.45), 0 0 10px rgba(255, 107, 107, 0.16);
   --glow-magenta: 0 0 4px rgba(231, 127, 217, 0.45), 0 0 10px rgba(231, 127, 217, 0.16);
+  /* CRT screen surface — slightly darker than --bg to preserve phosphor depth */
+  --crt-bg: #050604;
   color-scheme: dark;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -1111,14 +1113,14 @@ input {
   inline-size: min(100cqw, 100cqh * 4 / 3, 840px);
   block-size: min(100cqh, 100cqw * 3 / 4, 630px);
   position: relative;
-  background: #050604;
+  background: var(--crt-bg);
   overflow: hidden;
 }
 
 .crt--bezel {
   border: 18px solid var(--bezel);
   border-radius: 14px;
-  box-shadow: inset 0 0 0 2px #000, inset 0 0 24px rgba(0, 0, 0, 0.7), 0 2px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 24px rgba(0, 0, 0, 0.7), 0 2px 16px rgba(0, 0, 0, 0.5);
 }
 
 .crt--flat {
@@ -1135,7 +1137,7 @@ input {
   width: 100%;
   height: 100%;
   display: block;
-  background: #050604;
+  background: var(--crt-bg);
 }
 
 .crt__scan,
@@ -1328,6 +1330,22 @@ input {
   padding: 0;
   cursor: pointer;
   text-align: start;
+  position: relative;
+}
+
+/* Row reorder indicator — shown during 'move' drag when the event would
+   land before this row in the sorted order. */
+.timeline__row[data-insert-before='true']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 170px; /* skip the track-head columns */
+  right: 0;
+  height: 2px;
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(255, 169, 75, 0.7);
+  z-index: 5;
+  pointer-events: none;
 }
 
 .timeline__row--muted .timeline__bar {
@@ -1438,6 +1456,9 @@ input {
   position: absolute;
   top: 6px;
   bottom: 6px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
   border: 1px solid var(--phos-dim);
   background: rgba(214, 240, 74, 0.12);
   cursor: grab;
@@ -1448,6 +1469,56 @@ input {
 .timeline__bar--dragging {
   cursor: grabbing;
   filter: brightness(1.25);
+}
+
+/* Intro/outro transition wedge handles */
+.timeline__transition-wedge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.timeline__transition-wedge--intro {
+  left: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0%, transparent 100%);
+  clip-path: polygon(0 0, calc(100% - 3px) 0, 100% 50%, calc(100% - 3px) 100%, 0 100%);
+}
+
+.timeline__transition-wedge--outro {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.18) 0%, transparent 100%);
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 3px 100%, 0 50%);
+}
+
+.timeline__transition-wedge--intro:hover {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.32) 0%, transparent 100%);
+}
+
+.timeline__transition-wedge--outro:hover {
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.32) 0%, transparent 100%);
+}
+
+.timeline__transition-label {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  transform: translateY(-50%);
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: calc(100% - 6px);
+}
+
+.timeline__transition-wedge--outro .timeline__transition-label {
+  left: auto;
+  right: 4px;
+  text-align: right;
 }
 
 .timeline__resize {
@@ -1979,7 +2050,10 @@ input {
 
 .effect-picker__groups {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .effect-picker__group {
@@ -1996,15 +2070,19 @@ input {
 
 .effect-picker {
   position: absolute;
-  inset-inline: 12px;
-  inset-block-end: 12px;
-  z-index: 4;
+  inset-block-start: 8px;
+  inset-inline-end: 12px;
+  inline-size: 240px;
+  max-block-size: 300px;
+  z-index: 10;
   background: var(--panel);
   border: 1px solid var(--bezel-hi);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  padding: 12px;
-  display: grid;
-  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .effect-picker header {
@@ -2059,6 +2137,139 @@ input {
   border-color: var(--phos-dim);
   color: var(--phos);
   background: var(--accent-soft);
+}
+
+/* Intro/outro transition type popover */
+.timeline__transition-popover {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  z-index: 8;
+  inline-size: 190px;
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.timeline__transition-popover--intro {
+  /* left: position% is set inline — grows rightward from bar left edge */
+}
+
+.timeline__transition-popover--outro {
+  /* left: position% is set inline at bar right edge; shift left by own width */
+  transform: translateX(-100%);
+}
+
+.timeline__transition-popover header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.timeline__transition-popover header strong {
+  color: var(--ink);
+}
+
+.timeline__transition-popover header button {
+  margin-inline-start: auto;
+  background: transparent;
+  border: 1px solid var(--bezel);
+  color: var(--ink-muted);
+  inline-size: 18px;
+  block-size: 18px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.timeline__transition-popover header button:hover {
+  color: var(--amber);
+  border-color: var(--bezel-hi);
+}
+
+.timeline__transition-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.timeline__transition-type-grid button {
+  background: var(--bg);
+  border: 1px solid var(--bezel);
+  color: var(--ink-dim);
+  padding: 5px 4px;
+  font-size: 9px;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-align: center;
+}
+
+.timeline__transition-type-grid button:hover,
+.timeline__transition-type-grid button.is-active {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+  background: var(--accent-soft);
+}
+
+.timeline__transition-duration {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline__transition-duration span {
+  color: var(--ink-muted);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.timeline__transition-duration input {
+  background: var(--bg);
+  border: 1px solid var(--bezel);
+  color: var(--ink);
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.timeline__transition-duration input:focus {
+  outline: none;
+  border-color: var(--phos-dim);
+  box-shadow: var(--focus-ring);
+}
+
+.timeline__transition-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.timeline__transition-actions button {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--bezel);
+  color: var(--ink-dim);
+  padding: 5px 8px;
+  font-size: 9px;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.timeline__transition-actions button:hover {
+  border-color: var(--bezel-hi);
+  color: var(--ink);
 }
 
 /* ---- project panel ---- */
@@ -3015,7 +3226,7 @@ input {
 
 .start-signal {
   border: 1px solid var(--bezel);
-  background: #050604;
+  background: var(--crt-bg);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -3208,7 +3419,7 @@ input {
   width: 100%;
   height: 100%;
   border: 1px solid var(--bezel);
-  background: #050604;
+  background: var(--crt-bg);
   display: block;
   image-rendering: auto;
 }
@@ -3564,7 +3775,7 @@ input {
 
 .admin-note {
   border: 1px solid var(--bezel);
-  background: #050604;
+  background: var(--crt-bg);
   padding: 14px;
 }
 

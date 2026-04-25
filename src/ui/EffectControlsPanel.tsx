@@ -9,6 +9,7 @@ import type {
   TickRate,
   ToneName,
 } from '../engine/types';
+import { TONE_HEX } from '../engine/tones';
 import { Panel } from './components';
 
 type EffectControlsProps = {
@@ -32,21 +33,6 @@ type EffectControlsProps = {
 };
 
 const TONE_CHOICES: ToneName[] = ['phos', 'amber', 'green', 'red', 'cyan', 'magenta'];
-const TONE_HEX: Record<ToneName, string> = {
-  phos: '#D6F04A',
-  phosDim: '#8aa028',
-  amber: '#FFA94B',
-  amberDim: '#a86a2a',
-  green: '#7FE093',
-  red: '#FF6B6B',
-  cyan: '#7FE3E0',
-  magenta: '#E77FD9',
-  ink: '#CDDDA0',
-  inkDim: '#7A8F56',
-  inkMuted: '#7e8d56',
-  inkFaint: '#2f3a22',
-  ink2: '#FFC985',
-};
 
 export function EffectControlsPanel({
   event,
