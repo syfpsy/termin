@@ -9,6 +9,7 @@ import {
   type ParsedScene,
   type PropertyAnimation,
   type PropertyKeyframe,
+  type SceneData,
   type SceneEvent,
   type SceneMarker,
 } from './types';
@@ -31,6 +32,8 @@ const SCENE_RE = /^scene\s+([a-zA-Z0-9_-]+)\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
 const EVENT_RE = /^at\s+(\d+(?:\.\d+)?(?:ms|s))\s+([a-zA-Z][a-zA-Z0-9-]*)\s*(.*)$/;
 const MARKER_RE = /^mark\s+"([^"]*)"\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
 const PROP_RE = /^prop\s+([a-zA-Z][a-zA-Z0-9-]*)\s+(.+)$/;
+const DATA_RE = /^data\s+(\{.*\})\s*$/;
+const TEMPLATE_RE = /\{\{\s*([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$0-9][\w$]*)*)\s*\}\}/g;
 const QUOTED_RE = /"([^"]*)"/;
 const FLAG_TOKENS = new Set(['muted', 'solo', 'locked']);
 const EASING_TOKENS = new Set<EasingKind>(['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold']);
@@ -41,6 +44,7 @@ export function parseScene(source: string): ParsedScene {
   const events: SceneEvent[] = [];
   const markers: SceneMarker[] = [];
   const animations: PropertyAnimation[] = [];
+  let data: SceneData = {};
   let name = 'untitled_scene';
   let duration = 2400;
 
@@ -63,6 +67,28 @@ export function parseScene(source: string): ParsedScene {
       name = sceneMatch[1];
       duration = parseTime(sceneMatch[2]) ?? duration;
       parsedLines.push({ kind: 'scene', number, raw, name, duration });
+      return;
+    }
+
+    const dataMatch = trimmed.match(DATA_RE);
+    if (dataMatch) {
+      try {
+        const parsed = JSON.parse(dataMatch[1]);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          parsedLines.push({
+            kind: 'invalid',
+            number,
+            raw,
+            error: 'data line expects a JSON object literal.',
+          });
+          return;
+        }
+        data = deepMergeData(data, parsed as SceneData);
+        parsedLines.push({ kind: 'data', number, raw, data: parsed as SceneData });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid JSON.';
+        parsedLines.push({ kind: 'invalid', number, raw, error: `Invalid data JSON: ${message}` });
+      }
       return;
     }
 
@@ -118,7 +144,7 @@ export function parseScene(source: string): ParsedScene {
     }
 
     const quoteMatch = tail.match(QUOTED_RE);
-    const target = quoteMatch?.[1] ?? '';
+    const rawTarget = quoteMatch?.[1] ?? '';
     const rawModifiers = tail.replace(QUOTED_RE, '').trim().replace(/\s+/g, ' ');
     const flags = extractFlags(rawModifiers);
     const event: SceneEvent = {
@@ -126,7 +152,7 @@ export function parseScene(source: string): ParsedScene {
       line: number,
       at,
       effect,
-      target,
+      target: rawTarget,
       modifiers: rawModifiers,
       raw,
       flags,
@@ -135,6 +161,14 @@ export function parseScene(source: string): ParsedScene {
     events.push(event);
     parsedLines.push({ kind: 'event', number, raw, event });
   });
+
+  // After we've collected all `data` lines (they can appear anywhere in the
+  // source), substitute {{path}} placeholders in event targets in-place.
+  if (Object.keys(data).length > 0) {
+    for (const event of events) {
+      event.target = applyTemplate(event.target, data);
+    }
+  }
 
   const maxEventTime = events.reduce((max, event) => Math.max(max, event.at + estimateEventDuration(event)), 0);
   const maxKeyframeTime = animations.reduce(
@@ -147,8 +181,67 @@ export function parseScene(source: string): ParsedScene {
     events: events.sort((a, b) => a.at - b.at || a.line - b.line),
     markers: markers.sort((a, b) => a.at - b.at),
     animations,
+    data,
     lines: parsedLines,
   };
+}
+
+/**
+ * Replace every `{{path.to.value}}` token in `text` with the corresponding
+ * value from `data`. Missing paths are preserved verbatim so the unrendered
+ * placeholder stays visible — easier to debug than a silent blank.
+ */
+export function applyTemplate(text: string, data: SceneData): string {
+  if (!text || Object.keys(data).length === 0) return text;
+  return text.replace(TEMPLATE_RE, (match, path: string) => {
+    const value = lookupPath(data, path);
+    if (value === undefined || value === null) return match;
+    return formatTemplateValue(value);
+  });
+}
+
+function lookupPath(root: SceneData, path: string): unknown {
+  const parts = path.split('.');
+  let current: unknown = root;
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function formatTemplateValue(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number(value.toFixed(4)).toString();
+  }
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return JSON.stringify(value);
+}
+
+function deepMergeData(base: SceneData, patch: SceneData): SceneData {
+  const next: SceneData = { ...base };
+  for (const key of Object.keys(patch)) {
+    const baseVal = (base as Record<string, unknown>)[key];
+    const patchVal = (patch as Record<string, unknown>)[key];
+    if (
+      baseVal &&
+      typeof baseVal === 'object' &&
+      !Array.isArray(baseVal) &&
+      patchVal &&
+      typeof patchVal === 'object' &&
+      !Array.isArray(patchVal)
+    ) {
+      (next as Record<string, unknown>)[key] = deepMergeData(
+        baseVal as SceneData,
+        patchVal as SceneData,
+      );
+    } else {
+      (next as Record<string, unknown>)[key] = patchVal;
+    }
+  }
+  return next;
 }
 
 function parsePropLine(

@@ -495,6 +495,61 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
   assert.equal(empty.kept, 0);
 }
 
+// data-driven scenes: data {...} parsing + {{path}} substitution
+{
+  const { applyTemplate } = await import('../src/engine/dsl');
+  const dataScene = `scene status 2s
+data { "users": 1247, "service": { "online": 5, "name": "auth" } }
+at 0ms type "USERS:{{users}}" slowly
+at 600ms type "ONLINE:{{service.online}}/{{service.name}}"`;
+  const parsed = parseScene(dataScene);
+  assert.equal(parsed.events.length, 2, 'data line is not counted as an event');
+  assert.equal(parsed.data.users, 1247, 'data block parsed');
+  assert.deepEqual(parsed.data.service, { online: 5, name: 'auth' });
+  assert.equal(parsed.events[0].target, 'USERS:1247', 'top-level placeholder substituted');
+  assert.equal(parsed.events[1].target, 'ONLINE:5/auth', 'nested + multiple placeholders substituted');
+
+  // Multiple data lines deep-merge so the director can append patches.
+  const merged = parseScene(`scene m 1s
+data { "a": 1, "nested": { "x": 1 } }
+data { "b": 2, "nested": { "y": 2 } }
+at 0ms type "{{a}}/{{b}}/{{nested.x}}/{{nested.y}}"`);
+  assert.equal(merged.events[0].target, '1/2/1/2', 'multiple data lines merge deeply');
+
+  // Missing keys preserve the placeholder verbatim so it is visible.
+  const missing = parseScene(`scene n 1s
+data { "users": 5 }
+at 0ms type "{{users}}/{{ghost}}"`);
+  assert.equal(missing.events[0].target, '5/{{ghost}}', 'missing key keeps placeholder visible');
+
+  // Invalid JSON in data line reports a friendly error.
+  const bogus = parseScene(`scene b 1s\ndata { not real json }`);
+  assert.ok(
+    bogus.lines.some((line) => line.kind === 'invalid' && line.error.includes('Invalid data JSON')),
+    'invalid data JSON reports a friendly error',
+  );
+
+  // applyTemplate is exported and works standalone.
+  assert.equal(applyTemplate('hello {{name}}', { name: 'world' }), 'hello world');
+  assert.equal(applyTemplate('cost: {{p}}', { p: 12.5 }), 'cost: 12.5');
+  assert.equal(applyTemplate('flag: {{x}}', { x: true }), 'flag: true');
+
+  // Existing scenes (no data block) parse identically.
+  const plain = parseScene('scene p 1s\nat 0ms type "hello"');
+  assert.deepEqual(plain.data, {}, 'scenes without data still expose an empty data record');
+  assert.equal(plain.events[0].target, 'hello');
+
+  // Bundles still serialize cleanly with a data block in source.
+  const bundle = buildPhosphorBundle({
+    sceneName: 'with_data',
+    dsl: dataScene,
+    appearance: DEFAULT_APPEARANCE,
+    createdAt: '2026-04-25T00:00:00.000Z',
+  });
+  assert.ok(bundle.scene.source.includes('data { '), 'bundle preserves data line in source');
+  assert.equal(bundle.scene.events[0].target, 'USERS:1247', 'compiled events carry substituted text');
+}
+
 // per-event property keyframes (event-targeted prop lines)
 {
   const { sampleEventParam } = await import('../src/engine/keyframes');

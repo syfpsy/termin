@@ -168,11 +168,20 @@ export type ParsedLine =
       animation: PropertyAnimation;
     }
   | {
+      kind: 'data';
+      number: number;
+      raw: string;
+      data: SceneData;
+    }
+  | {
       kind: 'invalid';
       number: number;
       raw: string;
       error: string;
     };
+
+/** Data block used for `{{path}}` substitution in event targets. */
+export type SceneData = Record<string, unknown>;
 
 export type ParsedScene = {
   name: string;
@@ -180,6 +189,7 @@ export type ParsedScene = {
   events: SceneEvent[];
   markers: SceneMarker[];
   animations: PropertyAnimation[];
+  data: SceneData;
   lines: ParsedLine[];
 };
 

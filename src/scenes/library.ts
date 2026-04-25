@@ -63,6 +63,19 @@ at 1100ms wipe "ARCHIVE RESTORED" diagonal 700ms
 at 1900ms trail "*" path(8,25 12,23 18,22 26,20 38,19 52,17 70,15) 50ms/step
 at 2300ms reveal "> ARCHIVE RESTORED"`,
   },
+  {
+    id: 'status-panel',
+    shelf: 'reveals',
+    name: 'Status Panel',
+    description: 'Data-driven scene: edit the JSON, the readout updates live.',
+    dsl: `scene status_panel 2s
+data { "users": 1247, "requests": "892k", "service": { "online": 5, "name": "auth" } }
+# mix template values with literal text — substitution happens at parse time
+at 0ms    type "USERS: {{users}}" slowly
+at 500ms  type "REQUESTS: {{requests}}"
+at 950ms  pulse "{{service.name}} - {{service.online}} online" amber 600ms
+at 1700ms reveal "> ALL SYSTEMS NOMINAL"`,
+  },
 ];
 
 const SHELF_TARGETS: Record<LibraryScene['shelf'], number> = {

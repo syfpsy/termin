@@ -205,6 +205,22 @@ at 2080ms cursor "_" blink 500ms`}</pre>
                 events skip rendering; solo isolates one or more events when at least one is set; locked prevents
                 drag / resize in the editor.
               </p>
+              <h3>data binding</h3>
+              <p>
+                Add a <code>data {`{ ... }`}</code> line to the source and reference values from event targets
+                with <code>{`{{path.to.field}}`}</code>. Multiple <code>data</code> lines deep-merge so the
+                director can append patches without rewriting. Missing paths are kept verbatim so a typo stays
+                visible instead of silently disappearing.
+              </p>
+              <pre className="docs-code">{`scene status_panel 1.6s
+data { "users": 1247, "service": { "online": 5, "name": "auth" } }
+at 0ms    type "USERS:{{users}}" slowly
+at 600ms  type "ONLINE:{{service.online}}/{{service.name}}"
+at 1100ms reveal "> READY"`}</pre>
+              <p className="surface-copy">
+                Substitution happens at parse time, so editing the data block updates the preview live (and a new
+                bundle export carries the substituted text in <code>scene.events</code>).
+              </p>
             </section>
 
             <section id="docs-bundle">
