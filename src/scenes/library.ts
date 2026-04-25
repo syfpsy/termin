@@ -76,6 +76,20 @@ at 500ms  type "REQUESTS: {{requests}}"
 at 950ms  pulse "{{service.name}} - {{service.online}} online" amber 600ms
 at 1700ms reveal "> ALL SYSTEMS NOMINAL"`,
   },
+  {
+    id: 'stat-counter',
+    shelf: 'reveals',
+    name: 'Stat Counter',
+    description: 'Numbers roll up — pair with the data block for live dashboards.',
+    dsl: `scene stat_counter 2.4s
+data { "service": "auth" }
+# counter animates digits; ease-out makes the run-up feel decisive
+at 0ms    counter "USERS: "  from 0 to 1247 900ms ease-out
+at 200ms  counter "REQ: "    from 0 to 12400 900ms ease-out format:k
+at 400ms  counter "LOAD: "   from 0 to 0.87 700ms ease-out format:pct
+at 1300ms pulse "{{service}} cluster steady" amber 500ms
+at 1900ms reveal "> SNAPSHOT CAPTURED"`,
+  },
 ];
 
 const SHELF_TARGETS: Record<LibraryScene['shelf'], number> = {

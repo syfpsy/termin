@@ -607,6 +607,88 @@ at 0ms type "{{users}}/{{ghost}}"`);
   assert.equal(bundle.scene.animations[0].eventLine, 2, 'bundle preserves eventLine');
 }
 
+// counter primitive: parsing, time progression, formatting
+{
+  const { evaluateScene } = await import('../src/engine/primitives');
+  const { Grid } = await import('../src/engine/grid');
+
+  const counterSrc = `scene c 1s\nat 0ms counter "USERS: " from 0 to 1247 800ms ease-out`;
+  const counterScene = parseScene(counterSrc);
+  assert.equal(counterScene.events.length, 1, 'counter event parses');
+  assert.equal(counterScene.events[0].effect, 'counter', 'effect is counter');
+  assert.equal(counterScene.events[0].target, 'USERS: ', 'target keeps trailing space');
+  assert.ok(counterScene.events[0].modifiers.includes('from 0 to 1247'), 'modifiers carry from/to');
+
+  // Read the topmost row that contains a given marker substring.
+  function findRowText(grid: InstanceType<typeof Grid>, marker: string): string {
+    for (let r = 0; r < grid.rows; r += 1) {
+      let line = '';
+      for (let c = 0; c < grid.cols; c += 1) {
+        line += grid.cell(c, r).char;
+      }
+      if (line.includes(marker)) return line.replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  const grid = new Grid(96, 36);
+
+  evaluateScene(counterScene, grid, 0, 30);
+  const startText = findRowText(grid, 'USERS:');
+  assert.ok(startText.includes('USERS:'), 'counter renders label at t=0');
+  assert.ok(/USERS:\s*0\b/.test(startText), `counter starts at 0, got "${startText}"`);
+  assert.ok(!startText.includes('1247'), 'counter is not yet at end at t=0');
+
+  // At end of duration (24 ticks at 30Hz = 800ms) value lands on the target.
+  evaluateScene(counterScene, grid, 24, 30);
+  const endText = findRowText(grid, 'USERS:');
+  assert.ok(endText.includes('1,247'), `counter ends at 1,247 with thousands sep, got "${endText}"`);
+
+  // ease-out: at midpoint (12 ticks = 400ms) value should be past the linear midpoint.
+  evaluateScene(counterScene, grid, 12, 30);
+  const midText = findRowText(grid, 'USERS:');
+  const midDigits = midText.match(/[\d,]+/g);
+  const midValue = midDigits ? Number(midDigits[midDigits.length - 1].replace(/,/g, '')) : 0;
+  assert.ok(midValue > 624, `ease-out midpoint should exceed linear (623.5), got ${midValue}`);
+  assert.ok(midValue < 1247, `ease-out midpoint should not exceed end value, got ${midValue}`);
+
+  // format:k abbreviates thousands.
+  const kScene = parseScene(`scene k 1s\nat 0ms counter "REQ: " from 0 to 12400 800ms format:k`);
+  evaluateScene(kScene, grid, 24, 30);
+  const kText = findRowText(grid, 'REQ:');
+  assert.ok(kText.includes('12.4k') || kText.includes('12k'), `format:k should render 12.4k or 12k, got "${kText}"`);
+
+  // format:pct renders percentage.
+  const pctScene = parseScene(`scene p 1s\nat 0ms counter "LOAD: " from 0 to 0.87 800ms format:pct`);
+  evaluateScene(pctScene, grid, 24, 30);
+  const pctText = findRowText(grid, 'LOAD:');
+  assert.ok(pctText.includes('87%'), `format:pct should render 87%, got "${pctText}"`);
+
+  // counter participates in defaultEventTemplate (effect picker can add it).
+  const tmpl = defaultEventTemplate('counter', 0);
+  assert.equal(tmpl.effect, 'counter', 'counter has a default template');
+  assert.ok(tmpl.modifiers.includes('from'), 'default template includes from/to');
+
+  // counter is resizable: dragging a counter clip changes the duration modifier.
+  const resized = resizeEventInSource({
+    source: counterSrc,
+    event: counterScene.events[0],
+    durationMs: 1200,
+  });
+  assert.ok(resized.includes('1200ms'), 'resizing a counter writes a new ms duration');
+  assert.ok(!resized.includes('800ms'), 'old duration removed after resize');
+
+  // bundles preserve counter events.
+  const counterBundle = buildPhosphorBundle({
+    sceneName: 'with_counter',
+    dsl: counterSrc,
+    appearance: DEFAULT_APPEARANCE,
+    createdAt: '2026-04-25T00:00:00.000Z',
+  });
+  assert.equal(counterBundle.scene.events[0].effect, 'counter', 'bundle preserves counter effect');
+  assert.equal(counterBundle.scene.events[0].target, 'USERS: ', 'bundle preserves counter target');
+}
+
 // audio: sound: modifier extraction
 {
   const { eventSound, isSoundPreset, SOUND_PRESETS } = await import('../src/engine/audio');

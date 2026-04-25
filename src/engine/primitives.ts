@@ -98,6 +98,9 @@ function applyPrimitive(event: SceneEvent, ctx: PrimitiveContext) {
     case 'flash':
       drawFlash(event, ctx);
       break;
+    case 'counter':
+      drawCounter(event, ctx);
+      break;
     default:
       drawUnknown(event, ctx);
   }
@@ -265,6 +268,86 @@ function drawFlash(event: SceneEvent, ctx: PrimitiveContext) {
 function drawUnknown(event: SceneEvent, ctx: PrimitiveContext) {
   const label = `${event.effect} ${event.target}`.trim();
   ctx.grid.writeText(ctx.layout.x, rowForEvent(event, ctx.layout), label, 'inkDim', scaled(0.65, ctx));
+}
+
+const COUNTER_FROM_RE = /\bfrom\s+(-?\d+(?:\.\d+)?)/;
+const COUNTER_TO_RE = /\bto\s+(-?\d+(?:\.\d+)?)/;
+const COUNTER_EASING_RE = /\b(linear|ease-in-out|ease-in|ease-out|hold)\b/;
+const COUNTER_FORMAT_RE = /\bformat:(\w+)/;
+
+function drawCounter(event: SceneEvent, ctx: PrimitiveContext) {
+  const fromMatch = event.modifiers.match(COUNTER_FROM_RE);
+  const toMatch = event.modifiers.match(COUNTER_TO_RE);
+  const from = fromMatch ? Number(fromMatch[1]) : 0;
+  const to = toMatch ? Number(toMatch[1]) : from;
+  const duration = parseFirstDuration(event.modifiers) ?? 800;
+  const easingMatch = event.modifiers.match(COUNTER_EASING_RE);
+  const easing = (easingMatch?.[1] ?? 'ease-out') as
+    | 'linear'
+    | 'ease-in'
+    | 'ease-out'
+    | 'ease-in-out'
+    | 'hold';
+  const formatMatch = event.modifiers.match(COUNTER_FORMAT_RE);
+  const format = formatMatch?.[1];
+
+  const elapsed = ctx.timeMs - event.at;
+  const t = duration > 0 ? Math.max(0, Math.min(1, elapsed / duration)) : 1;
+  const eased = applyCounterEasing(easing, t);
+  const value = from + (to - from) * eased;
+
+  const text = `${event.target}${formatCounterValue(value, from, to, format)}`;
+  ctx.grid.writeText(
+    ctx.layout.x,
+    rowForEvent(event, ctx.layout),
+    text,
+    toneForEvent(event),
+    scaled(1, ctx),
+  );
+}
+
+function applyCounterEasing(
+  easing: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold',
+  t: number,
+): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  switch (easing) {
+    case 'linear':
+      return t;
+    case 'ease-in':
+      return t * t;
+    case 'ease-out':
+      return 1 - (1 - t) * (1 - t);
+    case 'ease-in-out':
+      return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+    case 'hold':
+      return 0;
+    default:
+      return t;
+  }
+}
+
+function formatCounterValue(value: number, from: number, to: number, format: string | undefined): string {
+  if (format === 'k' || format === 'thousands') {
+    if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
+    return formatCounterRaw(value, from, to);
+  }
+  if (format === 'pct' || format === 'percent') {
+    const pct = value * 100;
+    return `${pct.toFixed(Math.abs(pct - Math.round(pct)) < 0.05 ? 0 : 1)}%`;
+  }
+  return formatCounterRaw(value, from, to);
+}
+
+function formatCounterRaw(value: number, from: number, to: number): string {
+  const integerEndpoints = Number.isInteger(from) && Number.isInteger(to);
+  const display = integerEndpoints ? Math.round(value) : Number(value.toFixed(2));
+  const absMax = Math.max(Math.abs(from), Math.abs(to));
+  if (integerEndpoints && absMax >= 1000) {
+    return display.toLocaleString('en-US');
+  }
+  return display.toString();
 }
 
 function buildLayout(scene: ParsedScene, rows: number): SceneLayout {

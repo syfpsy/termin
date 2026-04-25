@@ -366,6 +366,7 @@ export function estimateEventDuration(event: SceneEvent, tickRate = 30): number 
   ) {
     return parseFirstDuration(event.modifiers) ?? 160;
   }
+  if (event.effect === 'counter') return parseFirstDuration(event.modifiers) ?? 800;
   if (event.effect === 'trail' || event.effect === 'decay-trail') return parseTrailDuration(event.modifiers) ?? 600;
   if (event.effect === 'dither' || event.effect === 'wave') return parseFirstDuration(event.modifiers) ?? 1000;
   if (event.effect === 'cursor' || event.effect === 'cursor-blink') {

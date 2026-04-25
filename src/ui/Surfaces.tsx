@@ -221,6 +221,20 @@ at 1100ms reveal "> READY"`}</pre>
                 Substitution happens at parse time, so editing the data block updates the preview live (and a new
                 bundle export carries the substituted text in <code>scene.events</code>).
               </p>
+              <h3>counter</h3>
+              <p className="surface-copy">
+                Animate a number from one value to another. Pair it with <code>{`{{path}}`}</code> in the
+                target prefix to show a label that mirrors live data while the digits roll up.
+              </p>
+              <pre className="docs-code">{`at 0ms counter "USERS: " from 0 to 1247 800ms ease-out
+at 0ms counter "LOAD: "  from 0 to 0.87 600ms ease-out format:pct
+at 0ms counter "REQ: "   from 0 to 12400 900ms ease-out format:k`}</pre>
+              <p className="surface-copy">
+                Endpoints can be integers or decimals. Integer pairs ≥ 1000 get a thousands separator;
+                <code> format:k</code> renders <code>1.2k</code>, <code>format:pct</code> renders <code>87%</code>.
+                Easings: <code>linear</code>, <code>ease-in</code>, <code>ease-out</code>,
+                <code> ease-in-out</code>, <code>hold</code>.
+              </p>
             </section>
 
             <section id="docs-bundle">

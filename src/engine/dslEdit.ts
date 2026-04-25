@@ -25,6 +25,7 @@ const RESIZABLE_EFFECTS = new Set([
   'dither',
   'cursor',
   'cursor-blink',
+  'counter',
 ]);
 
 export function isResizable(effect: string): boolean {
@@ -215,6 +216,7 @@ export function defaultEventTemplate(effect: string, atMs: number): EventFormatI
     shake: { effect: 'shake', target: 'SHAKE', modifiers: '3px 200ms' },
     flash: { effect: 'flash', target: 'screen', modifiers: '80ms' },
     reveal: { effect: 'reveal', target: '> NEW REVEAL', modifiers: '' },
+    counter: { effect: 'counter', target: 'USERS: ', modifiers: 'from 0 to 1247 800ms ease-out' },
   };
   const preset = presets[effect] ?? { effect, target: 'new', modifiers: '' };
   return { ...preset, atMs };

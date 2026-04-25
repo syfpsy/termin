@@ -29,6 +29,7 @@ const ADDABLE_EFFECTS: Array<{ value: string; label: string; category: string }>
   { value: 'wipe', label: 'wipe', category: 'sweep' },
   { value: 'dither', label: 'dither', category: 'pattern' },
   { value: 'decay-trail', label: 'decay-trail', category: 'pattern' },
+  { value: 'counter', label: 'counter', category: 'data' },
   { value: 'loop', label: 'loop', category: 'meta' },
 ];
 
