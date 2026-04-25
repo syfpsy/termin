@@ -122,6 +122,7 @@ import { AssetPanel } from './AssetPanel';
 import { EffectControlsPanel } from './EffectControlsPanel';
 import { TitlebarMenu } from './TitlebarMenu';
 import { CloudPanel } from './CloudPanel';
+import { LandingPage } from './LandingPage';
 import { Timeline } from './Timeline';
 
 type AppView =
@@ -191,6 +192,7 @@ export function App() {
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(() => new Set());
   const [timelineUnits, setTimelineUnits] = useState<'frame' | 'ms'>('frame');
   const [helpOpen, setHelpOpen] = useState(false);
+  const [enteredApp, setEnteredApp] = useState(false);
   const [audioMuted, setAudioMutedState] = useState(false);
   const [rippleEdit, setRippleEdit] = useState(false);
   const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
@@ -1269,6 +1271,12 @@ export function App() {
     tickMs,
     undo,
   ]);
+
+  // Show the landing page when Supabase is configured, auth check is done,
+  // and no session exists — unless the user clicked "Open the app" (enteredApp).
+  if (isSupabaseConfigured && authReady && !session && !enteredApp) {
+    return <LandingPage onEnter={() => setEnteredApp(true)} />;
+  }
 
   if (viewportTooSmall) {
     return <ViewportLock />;
