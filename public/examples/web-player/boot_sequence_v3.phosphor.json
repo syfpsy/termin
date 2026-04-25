@@ -99,7 +99,8 @@
         "tone": "phos",
         "raw": "at 2080ms cursor \"_\" blink 500ms"
       }
-    ]
+    ],
+    "animations": []
   },
   "appearance": {
     "chrome": "bezel",

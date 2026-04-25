@@ -1,5 +1,14 @@
 import { estimateEventDuration, isFlagToken, parseFirstDuration } from './dsl';
-import type { EventFlags, SceneEvent, SceneMarker } from './types';
+import { formatPropertyLine } from './keyframes';
+import type {
+  AnimatableAppearanceProp,
+  EasingKind,
+  EventFlags,
+  PropertyAnimation,
+  PropertyKeyframe,
+  SceneEvent,
+  SceneMarker,
+} from './types';
 
 /**
  * Effects whose duration is encoded in the modifiers and is therefore resizable.
@@ -477,4 +486,100 @@ export function eventsToFragment(events: SceneEvent[]): string {
       }),
     )
     .join('\n');
+}
+
+/** Replace an animation's source line with the given keyframes. */
+export function rewriteAnimationLine(
+  source: string,
+  animation: PropertyAnimation,
+  keyframes: PropertyKeyframe[],
+): string {
+  const sorted = [...keyframes].sort((a, b) => a.at - b.at);
+  return replaceLine(
+    source,
+    animation.line,
+    formatPropertyLine({ property: animation.property, keyframes: sorted }),
+  );
+}
+
+export function deleteAnimationInSource(source: string, animation: PropertyAnimation): string {
+  return removeLine(source, animation.line);
+}
+
+export type CreateAnimationInput = {
+  source: string;
+  property: AnimatableAppearanceProp;
+  keyframes: PropertyKeyframe[];
+};
+
+export function appendAnimation(input: CreateAnimationInput): LineEditResult {
+  if (input.keyframes.length === 0) return { source: input.source, lineNumber: null };
+  const sorted = [...input.keyframes].sort((a, b) => a.at - b.at);
+  return appendLine(
+    input.source,
+    formatPropertyLine({ property: input.property, keyframes: sorted }),
+  );
+}
+
+export function addKeyframeToAnimation(
+  source: string,
+  animation: PropertyAnimation,
+  keyframe: PropertyKeyframe,
+): string {
+  // If a keyframe already exists at this exact time, replace it.
+  const existing = animation.keyframes.findIndex((frame) => frame.at === keyframe.at);
+  const next =
+    existing >= 0
+      ? animation.keyframes.map((frame, index) => (index === existing ? keyframe : frame))
+      : [...animation.keyframes, keyframe];
+  return rewriteAnimationLine(source, animation, next);
+}
+
+export function removeKeyframe(
+  source: string,
+  animation: PropertyAnimation,
+  index: number,
+): string {
+  if (index < 0 || index >= animation.keyframes.length) return source;
+  const next = animation.keyframes.filter((_, i) => i !== index);
+  if (next.length === 0) return deleteAnimationInSource(source, animation);
+  return rewriteAnimationLine(source, animation, next);
+}
+
+export function moveKeyframe(
+  source: string,
+  animation: PropertyAnimation,
+  index: number,
+  atMs: number,
+  sceneDurationMs: number,
+  snapMs?: number,
+): string {
+  if (index < 0 || index >= animation.keyframes.length) return source;
+  const clamped = clampEventTime(atMs, sceneDurationMs, snapMs);
+  const next = animation.keyframes.map((frame, i) =>
+    i === index ? { ...frame, at: clamped } : frame,
+  );
+  return rewriteAnimationLine(source, animation, next);
+}
+
+export function setKeyframeValue(
+  source: string,
+  animation: PropertyAnimation,
+  index: number,
+  value: number,
+): string {
+  if (index < 0 || index >= animation.keyframes.length) return source;
+  const next = animation.keyframes.map((frame, i) => (i === index ? { ...frame, value } : frame));
+  return rewriteAnimationLine(source, animation, next);
+}
+
+export function setKeyframeEasing(
+  source: string,
+  animation: PropertyAnimation,
+  index: number,
+  easing: EasingKind,
+): string {
+  if (index < 0 || index >= animation.keyframes.length) return source;
+  const next = animation.keyframes.map((frame, i) => (i === index ? { ...frame, easing } : frame));
+  return rewriteAnimationLine(source, animation, next);
 }

@@ -1,4 +1,15 @@
-import type { EventFlags, ParsedLine, ParsedScene, SceneEvent, SceneMarker } from './types';
+import {
+  isAnimatableAppearanceProp,
+  type AnimatableAppearanceProp,
+  type EasingKind,
+  type EventFlags,
+  type ParsedLine,
+  type ParsedScene,
+  type PropertyAnimation,
+  type PropertyKeyframe,
+  type SceneEvent,
+  type SceneMarker,
+} from './types';
 
 export const DEFAULT_DSL = `scene boot_sequence_v3 2.4s
 # three status OKs stagger in, typed one glyph per tick
@@ -17,14 +28,17 @@ at 2080ms cursor "_" blink 500ms`;
 const SCENE_RE = /^scene\s+([a-zA-Z0-9_-]+)\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
 const EVENT_RE = /^at\s+(\d+(?:\.\d+)?(?:ms|s))\s+([a-zA-Z][a-zA-Z0-9-]*)\s*(.*)$/;
 const MARKER_RE = /^mark\s+"([^"]*)"\s+(\d+(?:\.\d+)?(?:ms|s))\s*$/;
+const PROP_RE = /^prop\s+([a-zA-Z][a-zA-Z0-9-]*)\s+(.+)$/;
 const QUOTED_RE = /"([^"]*)"/;
 const FLAG_TOKENS = new Set(['muted', 'solo', 'locked']);
+const EASING_TOKENS = new Set<EasingKind>(['linear', 'ease-in', 'ease-out', 'ease-in-out', 'hold']);
 
 export function parseScene(source: string): ParsedScene {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
   const parsedLines: ParsedLine[] = [];
   const events: SceneEvent[] = [];
   const markers: SceneMarker[] = [];
+  const animations: PropertyAnimation[] = [];
   let name = 'untitled_scene';
   let duration = 2400;
 
@@ -47,6 +61,40 @@ export function parseScene(source: string): ParsedScene {
       name = sceneMatch[1];
       duration = parseTime(sceneMatch[2]) ?? duration;
       parsedLines.push({ kind: 'scene', number, raw, name, duration });
+      return;
+    }
+
+    const propMatch = trimmed.match(PROP_RE);
+    if (propMatch) {
+      const property = propMatch[1];
+      if (!isAnimatableAppearanceProp(property)) {
+        parsedLines.push({
+          kind: 'invalid',
+          number,
+          raw,
+          error: `Unknown animatable property: ${property}`,
+        });
+        return;
+      }
+      const keyframes = parseKeyframeList(propMatch[2]);
+      if (keyframes.length === 0) {
+        parsedLines.push({
+          kind: 'invalid',
+          number,
+          raw,
+          error: 'Expected at least one <time> <value> pair after the property name.',
+        });
+        return;
+      }
+      const animation: PropertyAnimation = {
+        id: `prop-${number}-${property}`,
+        line: number,
+        property,
+        keyframes,
+        raw,
+      };
+      animations.push(animation);
+      parsedLines.push({ kind: 'animation', number, raw, animation });
       return;
     }
 
@@ -107,13 +155,45 @@ export function parseScene(source: string): ParsedScene {
   });
 
   const maxEventTime = events.reduce((max, event) => Math.max(max, event.at + estimateEventDuration(event)), 0);
+  const maxKeyframeTime = animations.reduce(
+    (max, animation) => Math.max(max, animation.keyframes[animation.keyframes.length - 1]?.at ?? 0),
+    0,
+  );
   return {
     name,
-    duration: Math.max(duration, maxEventTime, 1000),
+    duration: Math.max(duration, maxEventTime, maxKeyframeTime, 1000),
     events: events.sort((a, b) => a.at - b.at || a.line - b.line),
     markers: markers.sort((a, b) => a.at - b.at),
+    animations,
     lines: parsedLines,
   };
+}
+
+function parseKeyframeList(rest: string): PropertyKeyframe[] {
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  const keyframes: PropertyKeyframe[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const timeToken = tokens[i];
+    const at = parseTime(timeToken);
+    if (at === null) return [];
+    const valueToken = tokens[i + 1];
+    if (valueToken === undefined) return [];
+    const value = Number(valueToken);
+    if (!Number.isFinite(value)) return [];
+    let easing: EasingKind = 'linear';
+    let consumed = 2;
+    const maybeEasing = tokens[i + 2];
+    if (maybeEasing && EASING_TOKENS.has(maybeEasing as EasingKind)) {
+      easing = maybeEasing as EasingKind;
+      consumed = 3;
+    }
+    keyframes.push({ at, value, easing });
+    i += consumed;
+  }
+  // Ensure ascending time and dedupe identical times by keeping the last entry.
+  keyframes.sort((a, b) => a.at - b.at);
+  return keyframes;
 }
 
 export function extractFlags(modifiers: string): EventFlags {

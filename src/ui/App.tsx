@@ -18,23 +18,44 @@ import { TickClock } from '../engine/clock';
 import { parseScene } from '../engine/dsl';
 import {
   addEventToSource,
+  addKeyframeToAnimation,
   addMarkerToSource,
+  appendAnimation,
   defaultEventTemplate,
+  deleteAnimationInSource,
   deleteEventInSource,
   deleteEventsInSource,
   deleteMarkerInSource,
   eventsToFragment,
   moveEventInSource,
   moveEventsInSource,
+  moveKeyframe as moveKeyframeOp,
   pasteEventLines,
   patchEventInSource,
+  removeKeyframe as removeKeyframeOp,
   rescaleEventsInSource,
   resizeEventInSource,
   setEventFlagInSource,
+  setKeyframeEasing as setKeyframeEasingOp,
+  setKeyframeValue as setKeyframeValueOp,
   splitEventAtMs,
   type FlagName,
 } from '../engine/dslEdit';
-import type { Appearance, PreviewChrome, PreviewMode, ProviderKind, RendererKind, SceneEvent, SceneMarker, TickRate } from '../engine/types';
+import { sampleSceneAppearance } from '../engine/keyframes';
+import type {
+  AnimatableAppearanceProp,
+  Appearance,
+  EasingKind,
+  PreviewChrome,
+  PreviewMode,
+  PropertyAnimation,
+  PropertyKeyframe,
+  ProviderKind,
+  RendererKind,
+  SceneEvent,
+  SceneMarker,
+  TickRate,
+} from '../engine/types';
 import { DEFAULT_APPEARANCE } from '../engine/types';
 import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import type { LibraryScene } from '../scenes/library';
@@ -593,6 +614,71 @@ export function App() {
     deleteEvents(selectedEvents);
   }, [copySelectionToClipboard, deleteEvents, selectedEvents]);
 
+  const upsertKeyframeAt = useCallback(
+    (prop: AnimatableAppearanceProp, atMs: number, value: number, easing: EasingKind = 'linear') => {
+      const existing = scene.animations.find((animation) => animation.property === prop);
+      if (existing) {
+        commitDsl(addKeyframeToAnimation(dsl, existing, { at: atMs, value, easing }));
+      } else {
+        const result = appendAnimation({
+          source: dsl,
+          property: prop,
+          keyframes: [{ at: atMs, value, easing }],
+        });
+        if (result.lineNumber !== null) commitDsl(result.source);
+      }
+    },
+    [commitDsl, dsl, scene.animations],
+  );
+
+  const moveKeyframe = useCallback(
+    (animation: PropertyAnimation, index: number, atMs: number) => {
+      commitDsl(moveKeyframeOp(dsl, animation, index, atMs, scene.duration, tickMs));
+    },
+    [commitDsl, dsl, scene.duration, tickMs],
+  );
+
+  const removeKeyframe = useCallback(
+    (animation: PropertyAnimation, index: number) => {
+      commitDsl(removeKeyframeOp(dsl, animation, index));
+    },
+    [commitDsl, dsl],
+  );
+
+  const setKeyframeValue = useCallback(
+    (animation: PropertyAnimation, index: number, value: number) => {
+      commitDsl(setKeyframeValueOp(dsl, animation, index, value));
+    },
+    [commitDsl, dsl],
+  );
+
+  const setKeyframeEasing = useCallback(
+    (animation: PropertyAnimation, index: number, easing: EasingKind) => {
+      commitDsl(setKeyframeEasingOp(dsl, animation, index, easing));
+    },
+    [commitDsl, dsl],
+  );
+
+  const removeAnimation = useCallback(
+    (animation: PropertyAnimation) => {
+      commitDsl(deleteAnimationInSource(dsl, animation));
+    },
+    [commitDsl, dsl],
+  );
+
+  const animatedProps = useMemo(
+    () => new Set(scene.animations.map((animation) => animation.property)),
+    [scene.animations],
+  );
+
+  const handleAppearanceKeyframe = useCallback(
+    (prop: AnimatableAppearanceProp) => {
+      const playheadMs = Math.round((tick / appearance.tickRate) * 1000);
+      upsertKeyframeAt(prop, playheadMs, appearance[prop] as number);
+    },
+    [appearance, tick, upsertKeyframeAt],
+  );
+
   const rescaleSelectionTo = useCallback(
     (toStartMs: number, toEndMs: number) => {
       if (selectedEvents.length < 2) return;
@@ -886,8 +972,30 @@ export function App() {
 
           <aside className="right-stack" aria-label="Phosphor controls, library, and effects">
             <Panel title="PHOSPHOR" dense>
-              <SliderRow label="decay" value={appearance.decay} min={0} max={800} step={10} display={`${appearance.decay}ms`} onChange={(decay) => updateAppearance({ decay })} />
-              <SliderRow label="bloom" value={appearance.bloom} min={0} max={3} step={0.1} display={appearance.bloom.toFixed(1)} onChange={(bloom) => updateAppearance({ bloom })} />
+              <SliderRow
+                label="decay"
+                value={appearance.decay}
+                min={0}
+                max={800}
+                step={10}
+                display={`${appearance.decay}ms`}
+                onChange={(decay) => updateAppearance({ decay })}
+                animatable
+                animated={animatedProps.has('decay')}
+                onAnimateClick={() => handleAppearanceKeyframe('decay')}
+              />
+              <SliderRow
+                label="bloom"
+                value={appearance.bloom}
+                min={0}
+                max={3}
+                step={0.1}
+                display={appearance.bloom.toFixed(1)}
+                onChange={(bloom) => updateAppearance({ bloom })}
+                animatable
+                animated={animatedProps.has('bloom')}
+                onAnimateClick={() => handleAppearanceKeyframe('bloom')}
+              />
               <SliderRow
                 label="scanlines"
                 value={appearance.scanlines}
@@ -896,6 +1004,9 @@ export function App() {
                 step={0.05}
                 display={appearance.scanlines.toFixed(2)}
                 onChange={(scanlines) => updateAppearance({ scanlines })}
+                animatable
+                animated={animatedProps.has('scanlines')}
+                onAnimateClick={() => handleAppearanceKeyframe('scanlines')}
               />
               <SliderRow
                 label="curvature"
@@ -905,8 +1016,22 @@ export function App() {
                 step={0.05}
                 display={appearance.curvature.toFixed(2)}
                 onChange={(curvature) => updateAppearance({ curvature })}
+                animatable
+                animated={animatedProps.has('curvature')}
+                onAnimateClick={() => handleAppearanceKeyframe('curvature')}
               />
-              <SliderRow label="flicker" value={appearance.flicker} min={0} max={1} step={0.02} display={appearance.flicker.toFixed(2)} onChange={(flicker) => updateAppearance({ flicker })} />
+              <SliderRow
+                label="flicker"
+                value={appearance.flicker}
+                min={0}
+                max={1}
+                step={0.02}
+                display={appearance.flicker.toFixed(2)}
+                onChange={(flicker) => updateAppearance({ flicker })}
+                animatable
+                animated={animatedProps.has('flicker')}
+                onAnimateClick={() => handleAppearanceKeyframe('flicker')}
+              />
               <SliderRow
                 label="chromatic"
                 value={appearance.chromatic}
@@ -915,6 +1040,9 @@ export function App() {
                 step={0.02}
                 display={appearance.chromatic.toFixed(2)}
                 onChange={(chromatic) => updateAppearance({ chromatic })}
+                animatable
+                animated={animatedProps.has('chromatic')}
+                onAnimateClick={() => handleAppearanceKeyframe('chromatic')}
               />
             </Panel>
 

@@ -16,7 +16,9 @@ import { renderSvgAnimation, renderSvgPoster, svgFileName } from '../src/export/
 import { parseScene } from '../src/engine/dsl';
 import {
   addEventToSource,
+  addKeyframeToAnimation,
   addMarkerToSource,
+  appendAnimation,
   clampEventTime,
   defaultEventTemplate,
   deleteEventInSource,
@@ -28,16 +30,27 @@ import {
   isResizable,
   moveEventInSource,
   moveEventsInSource,
+  moveKeyframe,
   pasteEventLines,
   patchEventInSource,
+  removeKeyframe,
   rescaleEventsInSource,
   resizeEventInSource,
   setDurationModifier,
   setEventFlagInSource,
   setFlagInModifiers,
+  setKeyframeEasing,
+  setKeyframeValue,
   splitEventAtMs,
   stripFlagsFromModifiers,
 } from '../src/engine/dslEdit';
+import {
+  clampAnimatedValue,
+  easingProgress,
+  formatPropertyLine,
+  sampleAnimation,
+  sampleSceneAppearance,
+} from '../src/engine/keyframes';
 
 const bundle = buildPhosphorBundle({
   sceneName: 'boot_sequence_v3',
@@ -466,6 +479,112 @@ assert.ok(!animatedSvg.includes('<script'), 'animated svg must not embed scripts
   const solo = parsed.events.find((e) => e.target === 'C');
   assert.equal(muted?.flags.muted, true, 'B is muted');
   assert.equal(solo?.flags.solo, true, 'C is solo');
+}
+
+// property keyframes — parsing, sampling, easing, edit helpers, scene appearance
+{
+  // easing curves
+  assert.equal(easingProgress('linear', 0.5), 0.5, 'linear midpoint');
+  assert.equal(easingProgress('hold', 0.99), 0, 'hold stays at start until next keyframe');
+  assert.ok(easingProgress('ease-in', 0.5) < 0.5, 'ease-in slows the start');
+  assert.ok(easingProgress('ease-out', 0.5) > 0.5, 'ease-out front-loads progress');
+  assert.equal(easingProgress('ease-in-out', 0), 0, 'ease-in-out anchors at 0');
+  assert.equal(easingProgress('ease-in-out', 1), 1, 'ease-in-out anchors at 1');
+
+  assert.equal(clampAnimatedValue('decay', 9999), 5000, 'decay clamps to its 5000ms max');
+  assert.equal(clampAnimatedValue('decay', -10), 0, 'decay clamps to 0 floor');
+  assert.equal(clampAnimatedValue('bloom', 50), 8, 'bloom clamps to 8 max');
+
+  const animatedSrc = `scene anim 2s\nprop bloom 0ms 1.0 1000ms 2.5 ease-out 2000ms 0.5\nprop decay 0ms 240 1000ms 600`;
+  const animatedScene = parseScene(animatedSrc);
+  assert.equal(animatedScene.animations.length, 2, 'two prop lines parse');
+  const bloom = animatedScene.animations.find((a) => a.property === 'bloom');
+  const decay = animatedScene.animations.find((a) => a.property === 'decay');
+  assert.equal(bloom?.keyframes.length, 3, 'bloom has 3 keyframes');
+  assert.equal(bloom?.keyframes[1].easing, 'ease-out', 'easing token captured');
+  assert.equal(decay?.keyframes[0].value, 240, 'decay starts at 240');
+
+  // sampling
+  if (bloom) {
+    assert.equal(sampleAnimation(bloom, -100), 1.0, 'before-first holds first value');
+    assert.equal(sampleAnimation(bloom, 99999), 0.5, 'after-last holds last value');
+    assert.equal(sampleAnimation(bloom, 0), 1.0, 'sample at first keyframe');
+    assert.equal(sampleAnimation(bloom, 1000), 2.5, 'sample at second keyframe');
+    assert.equal(sampleAnimation(bloom, 2000), 0.5, 'sample at last keyframe');
+    // mid segment 0..1000 with ease-out: at 500ms, eased(0.5) > 0.5, so value > midpoint
+    const mid = sampleAnimation(bloom, 500);
+    const linearMid = 1.0 + (2.5 - 1.0) * 0.5;
+    assert.ok(mid > linearMid, 'ease-out pushes 500ms above linear midpoint');
+  }
+
+  // scene appearance sampling falls back to base for unanimated props
+  const baseAppearance = { ...DEFAULT_APPEARANCE, decay: 240, bloom: 1.0 };
+  const sampledMid = sampleSceneAppearance(animatedScene, baseAppearance, 1000);
+  assert.equal(sampledMid.bloom, 2.5, 'bloom hit 2.5 at 1000ms');
+  assert.equal(sampledMid.decay, 600, 'decay hit 600 at 1000ms');
+  assert.equal(sampledMid.scanlines, baseAppearance.scanlines, 'unanimated scanlines stays at base');
+
+  // formatPropertyLine round-trips through the parser
+  if (bloom) {
+    const formatted = formatPropertyLine(bloom);
+    const reparsed = parseScene(`scene rt 2s\n${formatted}`);
+    const reparsedBloom = reparsed.animations.find((a) => a.property === 'bloom');
+    assert.equal(reparsedBloom?.keyframes.length, 3, 'formatted prop line round-trips');
+    assert.equal(reparsedBloom?.keyframes[1].easing, 'ease-out', 'easing survives round-trip');
+  }
+
+  // dslEdit helpers: add / move / remove / setEasing / setValue
+  if (bloom) {
+    const inserted = addKeyframeToAnimation(animatedSrc, bloom, { at: 500, value: 1.8, easing: 'linear' });
+    const insertedScene = parseScene(inserted);
+    const insertedBloom = insertedScene.animations.find((a) => a.property === 'bloom');
+    assert.equal(insertedBloom?.keyframes.length, 4, 'addKeyframeToAnimation inserts new');
+    assert.equal(insertedBloom?.keyframes[1].at, 500, 'inserted keyframe sorted by time');
+
+    const moved = moveKeyframe(animatedSrc, bloom, 1, 1500, 2000);
+    const movedBloom = parseScene(moved).animations.find((a) => a.property === 'bloom');
+    assert.equal(movedBloom?.keyframes[1].at, 1500, 'moveKeyframe shifts time');
+
+    const valueSet = setKeyframeValue(animatedSrc, bloom, 1, 4.0);
+    const valueScene = parseScene(valueSet).animations.find((a) => a.property === 'bloom');
+    assert.equal(valueScene?.keyframes[1].value, 4, 'setKeyframeValue updates value');
+
+    const easingSet = setKeyframeEasing(animatedSrc, bloom, 2, 'ease-in-out');
+    const easingScene = parseScene(easingSet).animations.find((a) => a.property === 'bloom');
+    assert.equal(easingScene?.keyframes[2].easing, 'ease-in-out', 'setKeyframeEasing updates easing');
+
+    const removed = removeKeyframe(animatedSrc, bloom, 1);
+    const removedBloom = parseScene(removed).animations.find((a) => a.property === 'bloom');
+    assert.equal(removedBloom?.keyframes.length, 2, 'removeKeyframe drops one');
+
+    // removing the last keyframe drops the entire prop line
+    const single = `scene s 1s\nprop bloom 200ms 1.5`;
+    const singleParsed = parseScene(single);
+    const cleared = removeKeyframe(single, singleParsed.animations[0], 0);
+    assert.equal(parseScene(cleared).animations.length, 0, 'removing the last keyframe removes the prop line');
+  }
+
+  // appendAnimation
+  const blank = `scene b 1s\nat 0ms type "x"`;
+  const appended = appendAnimation({
+    source: blank,
+    property: 'flicker',
+    keyframes: [
+      { at: 0, value: 0, easing: 'linear' },
+      { at: 800, value: 0.6, easing: 'ease-in' },
+    ],
+  });
+  assert.ok(appended.lineNumber !== null, 'appendAnimation returns line number');
+  const appendedScene = parseScene(appended.source);
+  assert.equal(appendedScene.animations.length, 1, 'appended animation parses');
+  assert.equal(appendedScene.animations[0].keyframes[1].easing, 'ease-in', 'appended easing preserved');
+
+  // unknown property fails clearly
+  const bogus = parseScene(`scene b 1s\nprop zzz 0ms 1.0`);
+  assert.ok(
+    bogus.lines.some((line) => line.kind === 'invalid' && line.error.includes('Unknown')),
+    'unknown property reports an error line',
+  );
 }
 
 console.log(

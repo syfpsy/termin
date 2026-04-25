@@ -76,6 +76,56 @@ export type SceneMarker = {
   raw: string;
 };
 
+export type EasingKind = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
+
+export type PropertyKeyframe = {
+  /** Time in milliseconds from scene start. */
+  at: number;
+  value: number;
+  /**
+   * Easing applied to the segment that ends at this keyframe (i.e., how the
+   * value transitions from the previous keyframe's value to this keyframe's
+   * value). The easing on the first keyframe is unused.
+   */
+  easing: EasingKind;
+};
+
+/**
+ * The set of appearance properties that participate in keyframe animation.
+ * Limited to numeric scalar fields so sampling stays simple. Color/font/mode
+ * remain static — animate via tone modifiers on individual events instead.
+ */
+export type AnimatableAppearanceProp =
+  | 'decay'
+  | 'bloom'
+  | 'scanlines'
+  | 'curvature'
+  | 'flicker'
+  | 'chromatic'
+  | 'sizeScale';
+
+export type PropertyAnimation = {
+  id: string;
+  line: number;
+  property: AnimatableAppearanceProp;
+  keyframes: PropertyKeyframe[];
+  raw: string;
+};
+
+export const ANIMATABLE_APPEARANCE_PROPS: AnimatableAppearanceProp[] = [
+  'decay',
+  'bloom',
+  'scanlines',
+  'curvature',
+  'flicker',
+  'chromatic',
+  'sizeScale',
+];
+
+export function isAnimatableAppearanceProp(name: string): name is AnimatableAppearanceProp {
+  return (ANIMATABLE_APPEARANCE_PROPS as string[]).includes(name);
+}
+
 export type ParsedLine =
   | {
       kind: 'blank' | 'comment';
@@ -102,6 +152,12 @@ export type ParsedLine =
       marker: SceneMarker;
     }
   | {
+      kind: 'animation';
+      number: number;
+      raw: string;
+      animation: PropertyAnimation;
+    }
+  | {
       kind: 'invalid';
       number: number;
       raw: string;
@@ -113,6 +169,7 @@ export type ParsedScene = {
   duration: number;
   events: SceneEvent[];
   markers: SceneMarker[];
+  animations: PropertyAnimation[];
   lines: ParsedLine[];
 };
 

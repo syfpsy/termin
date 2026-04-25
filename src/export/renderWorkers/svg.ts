@@ -1,5 +1,6 @@
 import { parseScene } from '../../engine/dsl';
 import { Grid, PhosphorBuffer } from '../../engine/grid';
+import { sampleSceneAppearance } from '../../engine/keyframes';
 import { evaluateScene } from '../../engine/primitives';
 import type { Appearance, ToneName } from '../../engine/types';
 import { TONE_HEX } from '../../engine/types';
@@ -52,8 +53,10 @@ export function renderSvgPoster(input: SvgInput): string {
   let bestScore = -1;
 
   for (let frame = 0; frame < totalFrames; frame += 1) {
+    const atMs = (frame * 1000) / tickRate;
+    const sampled = sampleSceneAppearance(scene, input.appearance, atMs);
     evaluateScene(scene, grid, frame, tickRate);
-    buffer.update(grid, frameMs, input.appearance.decay);
+    buffer.update(grid, frameMs, sampled.decay);
 
     const cells: SvgCell[] = [];
     let score = 0;
@@ -142,8 +145,10 @@ export function renderSvgAnimation(input: SvgInput): string {
   const timelines = new Map<string, TimelineEntry[]>();
 
   for (let frame = 0; frame < totalFrames; frame += 1) {
+    const atMs = (frame * 1000) / tickRate;
+    const sampled = sampleSceneAppearance(scene, input.appearance, atMs);
     evaluateScene(scene, grid, frame, tickRate);
-    buffer.update(grid, frameMs, input.appearance.decay);
+    buffer.update(grid, frameMs, sampled.decay);
     buffer.forEach((cell, c, r) => {
       if (cell.char === ' ') return;
       if (cell.intensity <= 0.04) return;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { evaluateScene } from '../engine/primitives';
 import { Grid, PhosphorBuffer } from '../engine/grid';
+import { sampleSceneAppearance } from '../engine/keyframes';
 import type { Appearance, ParsedScene, RendererKind } from '../engine/types';
 import { renderBufferToCanvas } from '../engine/renderers/canvasRenderer';
 import { WebGlPhosphorRenderer } from '../engine/renderers/webglRenderer';
@@ -36,6 +37,11 @@ export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = f
     [scene, appearance.tickRate],
   );
 
+  const liveAppearance = useMemo(
+    () => sampleSceneAppearance(scene, appearance, (tick * 1000) / appearance.tickRate),
+    [appearance, scene, tick],
+  );
+
   useEffect(() => {
     const element = frameRef.current;
     if (!element) return;
@@ -65,25 +71,30 @@ export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = f
 
     const start = needsReplay ? 0 : lastTickRef.current + 1;
     for (let nextTick = start; nextTick <= tick; nextTick += 1) {
+      const tickAtMs = (nextTick * 1000) / appearance.tickRate;
+      const sampled = sampleSceneAppearance(scene, appearance, tickAtMs);
       evaluateScene(scene, grid, nextTick, appearance.tickRate);
-      buffer.update(grid, dt, appearance.decay);
+      buffer.update(grid, dt, sampled.decay);
     }
     lastTickRef.current = tick;
+
+    const currentMs = (tick * 1000) / appearance.tickRate;
+    const renderedAppearance = sampleSceneAppearance(scene, appearance, currentMs);
 
     try {
       setError(null);
       if (renderer === 'webgl') {
         if (!webglRef.current) webglRef.current = new WebGlPhosphorRenderer(canvas);
-        webglRef.current.render(buffer, appearance, size.width, size.height, tick * dt);
+        webglRef.current.render(buffer, renderedAppearance, size.width, size.height, tick * dt);
       } else {
         webglRef.current = null;
-        renderBufferToCanvas(canvas, buffer, appearance, size);
+        renderBufferToCanvas(canvas, buffer, renderedAppearance, size);
       }
     } catch (renderError) {
       webglRef.current = null;
       const message = renderError instanceof Error ? renderError.message : 'Renderer failed.';
       setError(message);
-      renderBufferToCanvas(canvas, buffer, appearance, size);
+      renderBufferToCanvas(canvas, buffer, renderedAppearance, size);
     }
 
     if (onionSkin) {
@@ -91,14 +102,16 @@ export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = f
       const nextCanvas = onionNextRef.current;
       const onionGrid = onionGridRef.current;
       const onionBuffer = onionBufferRef.current;
-      const dim: Appearance = { ...appearance, bloom: appearance.bloom * 0.4 };
+      const dim: Appearance = { ...renderedAppearance, bloom: renderedAppearance.bloom * 0.4 };
 
       if (prevCanvas && tick > 0) {
         onionBuffer.reset();
-        const start = Math.max(0, tick - 6);
-        for (let i = start; i < tick; i += 1) {
+        const onionStart = Math.max(0, tick - 6);
+        for (let i = onionStart; i < tick; i += 1) {
+          const ms = (i * 1000) / appearance.tickRate;
+          const sampled = sampleSceneAppearance(scene, appearance, ms);
           evaluateScene(scene, onionGrid, i, appearance.tickRate);
-          onionBuffer.update(onionGrid, dt, appearance.decay);
+          onionBuffer.update(onionGrid, dt, sampled.decay);
         }
         renderBufferToCanvas(prevCanvas, onionBuffer, dim, size);
       } else if (prevCanvas) {
@@ -110,8 +123,10 @@ export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = f
         onionBuffer.reset();
         const lookahead = Math.min(durationTicksFor(scene, appearance.tickRate), tick + 6);
         for (let i = 0; i <= lookahead; i += 1) {
+          const ms = (i * 1000) / appearance.tickRate;
+          const sampled = sampleSceneAppearance(scene, appearance, ms);
           evaluateScene(scene, onionGrid, i, appearance.tickRate);
-          onionBuffer.update(onionGrid, dt, appearance.decay);
+          onionBuffer.update(onionGrid, dt, sampled.decay);
         }
         renderBufferToCanvas(nextCanvas, onionBuffer, dim, size);
       }
@@ -127,7 +142,7 @@ export function EnginePreview({ scene, appearance, renderer, tick, onionSkin = f
         </>
       )}
       <canvas ref={canvasRef} className="crt__canvas" aria-label="Phosphor scene preview" />
-      <div className="crt__scan" style={{ opacity: appearance.scanlines }} />
+      <div className="crt__scan" style={{ opacity: liveAppearance.scanlines }} />
       {appearance.chrome === 'bezel' && <div className="crt__curve" />}
       {error && <div className="crt__error">{error}</div>}
     </div>

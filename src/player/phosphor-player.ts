@@ -1,5 +1,6 @@
 import { parseScene } from '../engine/dsl';
 import { Grid, PhosphorBuffer } from '../engine/grid';
+import { sampleSceneAppearance } from '../engine/keyframes';
 import { evaluateScene } from '../engine/primitives';
 import { renderBufferToCanvas } from '../engine/renderers/canvasRenderer';
 import type { Appearance, ParsedScene } from '../engine/types';
@@ -156,12 +157,15 @@ export class PhosphorPlayerElement extends HTMLElement {
     }
 
     for (let nextTick = this.lastTick + 1; nextTick <= tick; nextTick += 1) {
+      const atMs = (nextTick * 1000) / this.appearance.tickRate;
+      const sampled = sampleSceneAppearance(this.scene, this.appearance, atMs);
       evaluateScene(this.scene, this.grid, nextTick, this.appearance.tickRate);
-      this.buffer.update(this.grid, dt, this.appearance.decay);
+      this.buffer.update(this.grid, dt, sampled.decay);
     }
 
     this.lastTick = tick;
-    renderBufferToCanvas(this.canvas, this.buffer, this.appearance, {
+    const renderAppearance = sampleSceneAppearance(this.scene, this.appearance, playbackMs);
+    renderBufferToCanvas(this.canvas, this.buffer, renderAppearance, {
       width: this.width,
       height: this.height,
     });

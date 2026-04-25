@@ -113,11 +113,25 @@ type SliderRowProps = {
   step: number;
   display: string;
   onChange: (value: number) => void;
+  animatable?: boolean;
+  animated?: boolean;
+  onAnimateClick?: () => void;
 };
 
-export function SliderRow({ label, value, min, max, step, display, onChange }: SliderRowProps) {
+export function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+  animatable = false,
+  animated = false,
+  onAnimateClick,
+}: SliderRowProps) {
   return (
-    <label className="slider-row">
+    <label className={`slider-row ${animatable ? 'slider-row--animatable' : ''}`}>
       <span>{label}</span>
       <input
         min={min}
@@ -130,6 +144,23 @@ export function SliderRow({ label, value, min, max, step, display, onChange }: S
         onChange={(event) => onChange(Number(event.target.value))}
       />
       <strong aria-hidden="true">{display}</strong>
+      {animatable && onAnimateClick && (
+        <button
+          type="button"
+          className={`slider-row__keyframe ${animated ? 'slider-row__keyframe--on' : ''}`}
+          aria-label={
+            animated ? `${label} is keyframed; add keyframe at playhead` : `Animate ${label} — add a keyframe at playhead`
+          }
+          aria-pressed={animated}
+          title={animated ? 'animated — add keyframe at playhead' : 'add keyframe at playhead'}
+          onClick={(event) => {
+            event.preventDefault();
+            onAnimateClick();
+          }}
+        >
+          ◆
+        </button>
+      )}
     </label>
   );
 }

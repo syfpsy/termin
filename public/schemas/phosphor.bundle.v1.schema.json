@@ -60,6 +60,33 @@
             },
             "additionalProperties": true
           }
+        },
+        "animations": {
+          "description": "Optional. Compiled property keyframes for device runtimes that don't parse the .me source. Each entry animates one numeric appearance property (decay, bloom, scanlines, curvature, flicker, chromatic, sizeScale).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["property", "keyframes"],
+            "properties": {
+              "id": { "type": "string" },
+              "property": { "enum": ["decay", "bloom", "scanlines", "curvature", "flicker", "chromatic", "sizeScale"] },
+              "keyframes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["atMs", "value", "easing"],
+                  "properties": {
+                    "atMs": { "type": "number", "minimum": 0 },
+                    "value": { "type": "number" },
+                    "easing": { "enum": ["linear", "ease-in", "ease-out", "ease-in-out", "hold"] }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            },
+            "additionalProperties": true
+          }
         }
       },
       "additionalProperties": true

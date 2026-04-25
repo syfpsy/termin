@@ -1,5 +1,6 @@
 import { parseScene } from '../../engine/dsl';
 import { Grid, PhosphorBuffer } from '../../engine/grid';
+import { sampleSceneAppearance } from '../../engine/keyframes';
 import { evaluateScene } from '../../engine/primitives';
 import { renderBufferToCanvas } from '../../engine/renderers/canvasRenderer';
 import type { Appearance } from '../../engine/types';
@@ -78,9 +79,11 @@ export async function recordSceneStream(input: StreamRecordingInput): Promise<Bl
         recorder.stop();
         throw new DOMException('Render aborted.', 'AbortError');
       }
+      const atMs = (frame * 1000) / tickRate;
+      const sampled = sampleSceneAppearance(scene, input.appearance, atMs);
       evaluateScene(scene, grid, frame, tickRate);
-      buffer.update(grid, frameMs, input.appearance.decay);
-      renderBufferToCanvas(canvas, buffer, input.appearance, {
+      buffer.update(grid, frameMs, sampled.decay);
+      renderBufferToCanvas(canvas, buffer, sampled, {
         width,
         height,
         pixelRatio: 1,

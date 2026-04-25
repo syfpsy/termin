@@ -1,5 +1,12 @@
 import { estimateEventDuration, eventTone, parseScene } from '../engine/dsl';
-import { DEFAULT_APPEARANCE, type Appearance, type ParsedScene, type TickRate } from '../engine/types';
+import {
+  DEFAULT_APPEARANCE,
+  type AnimatableAppearanceProp,
+  type Appearance,
+  type EasingKind,
+  type ParsedScene,
+  type TickRate,
+} from '../engine/types';
 
 export const PHOSPHOR_BUNDLE_SCHEMA_ID = 'phosphor.bundle.v1';
 export const PHOSPHOR_BUNDLE_SCHEMA_URL = 'https://phosphor.dev/schemas/phosphor.bundle.v1.json';
@@ -16,6 +23,18 @@ export type PhosphorCompiledEvent = {
   modifiers: string;
   tone: string;
   raw: string;
+};
+
+export type PhosphorCompiledKeyframe = {
+  atMs: number;
+  value: number;
+  easing: EasingKind;
+};
+
+export type PhosphorCompiledAnimation = {
+  id: string;
+  property: AnimatableAppearanceProp;
+  keyframes: PhosphorCompiledKeyframe[];
 };
 
 export type PhosphorBundle = {
@@ -42,6 +61,7 @@ export type PhosphorBundle = {
       endMs: number;
     };
     events: PhosphorCompiledEvent[];
+    animations: PhosphorCompiledAnimation[];
   };
   appearance: Appearance;
   assets: {
@@ -110,6 +130,7 @@ export function buildPhosphorBundle({
         endMs: parsed.duration,
       },
       events: compileEvents(parsed, normalizedAppearance.tickRate),
+      animations: compileAnimations(parsed),
     },
     appearance: normalizedAppearance,
     assets: {
@@ -219,6 +240,18 @@ function compileEvents(scene: ParsedScene, tickRate: TickRate): PhosphorCompiled
     modifiers: event.modifiers,
     tone: eventTone(event),
     raw: event.raw,
+  }));
+}
+
+function compileAnimations(scene: ParsedScene): PhosphorCompiledAnimation[] {
+  return scene.animations.map((animation) => ({
+    id: animation.id,
+    property: animation.property,
+    keyframes: animation.keyframes.map((frame) => ({
+      atMs: frame.at,
+      value: frame.value,
+      easing: frame.easing,
+    })),
   }));
 }
 

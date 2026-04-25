@@ -1,5 +1,6 @@
 import { parseScene } from '../../engine/dsl';
 import { Grid, PhosphorBuffer } from '../../engine/grid';
+import { sampleSceneAppearance } from '../../engine/keyframes';
 import { evaluateScene } from '../../engine/primitives';
 import { renderBufferToCanvas } from '../../engine/renderers/canvasRenderer';
 import type { Appearance } from '../../engine/types';
@@ -41,9 +42,11 @@ export async function renderFrameSequence(options: FrameRenderOptions): Promise<
   try {
     for (let frame = 0; frame < totalFrames; frame += 1) {
       if (options.signal?.aborted) throw new DOMException('Render aborted.', 'AbortError');
+      const atMs = (frame * 1000) / tickRate;
+      const sampled = sampleSceneAppearance(scene, options.appearance, atMs);
       evaluateScene(scene, grid, frame, tickRate);
-      buffer.update(grid, dt, options.appearance.decay);
-      renderBufferToCanvas(canvas, buffer, options.appearance, {
+      buffer.update(grid, dt, sampled.decay);
+      renderBufferToCanvas(canvas, buffer, sampled, {
         width: options.width ?? DEFAULT_WIDTH,
         height: options.height ?? DEFAULT_HEIGHT,
         pixelRatio: options.pixelRatio ?? 1,
