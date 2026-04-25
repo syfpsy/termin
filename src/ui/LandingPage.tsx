@@ -136,9 +136,22 @@ type ChangelogEntry = {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    version: 'v0.2.0',
+    version: 'v0.2.1',
     date: '2025-04',
     tag: 'current',
+    items: [
+      'Landing page: animated hero with looping CRT preview, release strip, how-it-works, live examples, pricing',
+      'Docs sub-page: accordion with scene syntax, effects reference, tones, sound presets, keyboard shortcuts',
+      'Changelog sub-page: versioned release notes with accordion',
+      'Auth gate: landing shown to unauthenticated visitors; "Open the app" allows guest studio access',
+      'CRT glow / breathe / glitch keyframes added to styles.css',
+      'package.json version synced to 0.2.1',
+    ],
+  },
+  {
+    version: 'v0.2.0',
+    date: '2025-04',
+    tag: '',
     items: [
       'Sound library with 20 synthesized presets (beep-high, scan, data-burst, alarm…)',
       'Transition wedge handles for intro/outro easing, fully keyboard-accessible',
@@ -439,9 +452,9 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
       {/* Latest release strip */}
       <div className="lp-release-strip" aria-label="Latest release">
         <span className="lp-release-strip__label">latest</span>
-        <span className="lp-release-strip__version">v0.2.0</span>
+        <span className="lp-release-strip__version">v0.2.1</span>
         <span className="lp-release-strip__items">
-          Sound library · Transition easing handles · Left-resize drag · Effect picker on timeline
+          Landing page · Docs · Changelog · Auth gate · CRT glow animations
         </span>
         <button
           type="button"
