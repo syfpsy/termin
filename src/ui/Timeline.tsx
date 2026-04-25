@@ -166,6 +166,7 @@ export function Timeline(props: TimelineProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const tracksRef = useRef<HTMLDivElement | null>(null);
+  const suppressClickRef = useRef(false);
 
   const selectedEvent = useMemo(() => {
     if (selectedEventIds.size === 0) return null;
@@ -287,10 +288,16 @@ export function Timeline(props: TimelineProps) {
         const id = row.dataset.eventId;
         if (id) ids.push(id);
       }
-      if (ids.length > 0) onSelectMany(ids, true);
-      else if (Math.abs(marquee.currentClientX - marquee.startClientX) > 4) onSelectOne(null);
+      const traveled =
+        Math.abs(marquee.currentClientX - marquee.startClientX) > 4 ||
+        Math.abs(marquee.currentClientY - marquee.startClientY) > 4;
+      if (ids.length > 0) {
+        onSelectMany(ids, true);
+        suppressClickRef.current = true;
+      } else if (traveled) {
+        onSelectOne(null);
+      }
       setMarquee(null);
-      void tracksRect;
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
@@ -449,11 +456,14 @@ export function Timeline(props: TimelineProps) {
               if ((e.target as HTMLElement).closest('.timeline__tick, .timeline__marker, .timeline__loop-handle')) return;
               if (!e.altKey && !e.shiftKey) return;
               e.preventDefault();
-              const rect = e.currentTarget.getBoundingClientRect();
+              // Capture the element up front so the listeners below don't depend on the
+              // (potentially recycled) React synthetic event.
+              const ticksEl = e.currentTarget as HTMLElement;
+              const rect = ticksEl.getBoundingClientRect();
               const ratio = (e.clientX - rect.left) / rect.width;
               const startMs = clampMs(ratio * scene.duration, 0, scene.duration);
               const onMove = (move: PointerEvent) => {
-                const r = e.currentTarget.getBoundingClientRect();
+                const r = ticksEl.getBoundingClientRect();
                 const ratio2 = (move.clientX - r.left) / r.width;
                 const endMs = clampMs(ratio2 * scene.duration, 0, scene.duration);
                 onLoopRegionChange({
@@ -520,6 +530,12 @@ export function Timeline(props: TimelineProps) {
           ref={tracksRef}
           onPointerDown={handleTracksPointerDown}
           onClick={(event) => {
+            // Suppress the click-to-clear when this click came from the end of a marquee
+            // gesture that just selected events.
+            if (suppressClickRef.current) {
+              suppressClickRef.current = false;
+              return;
+            }
             // bare click on the tracks (not a row/bar/lane) clears selection
             if ((event.target as HTMLElement).closest('.timeline__row')) return;
             onSelectOne(null);

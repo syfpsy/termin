@@ -41,7 +41,6 @@ import {
   splitEventAtMs,
   type FlagName,
 } from '../engine/dslEdit';
-import { sampleSceneAppearance } from '../engine/keyframes';
 import type {
   AnimatableAppearanceProp,
   Appearance,
@@ -49,7 +48,6 @@ import type {
   PreviewChrome,
   PreviewMode,
   PropertyAnimation,
-  PropertyKeyframe,
   ProviderKind,
   RendererKind,
   SceneEvent,
@@ -178,6 +176,26 @@ export function App() {
       return prev.slice(0, -1);
     });
   }, [dsl]);
+
+  const jumpHistory = useCallback(
+    (stepsBack: number) => {
+      if (stepsBack <= 0) return;
+      setPast((prevPast) => {
+        if (prevPast.length === 0) return prevPast;
+        const step = Math.min(stepsBack, prevPast.length);
+        const target = prevPast[prevPast.length - step];
+        // Items being undone in order from oldest to newest:
+        //   prevPast[len - step + 1], ..., prevPast[len - 1], current dsl
+        // They go onto the future stack newest-first, so reverse before prepending.
+        const undone = prevPast.slice(prevPast.length - step + 1).concat(dsl);
+        setFuture((future) => [...undone.reverse(), ...future].slice(0, 100));
+        setDsl(target);
+        setPreviewDsl(null);
+        return prevPast.slice(0, prevPast.length - step);
+      });
+    },
+    [dsl],
+  );
 
   const redo = useCallback(() => {
     setFuture((prev) => {
@@ -1104,9 +1122,7 @@ export function App() {
               onRescaleSelection={rescaleSelectionTo}
               onUndo={undo}
               onRedo={redo}
-              onJumpToHistory={(stepsBack) => {
-                for (let i = 0; i < stepsBack; i += 1) undo();
-              }}
+              onJumpToHistory={jumpHistory}
             />
           </section>
         </>
