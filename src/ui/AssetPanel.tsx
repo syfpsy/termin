@@ -143,10 +143,12 @@ function AssetRow({
   onEditBody,
   onDelete,
 }: AssetRowProps) {
+  // Palette is intentionally NOT applyable yet — the engine doesn't read
+  // tone tokens from a project palette today, so a "use at playhead" button
+  // would do nothing visible. Lands when palette tokens ship.
   const isApplyable =
     asset.kind === 'text' ||
     asset.kind === 'ascii' ||
-    asset.kind === 'palette' ||
     asset.kind === 'data' ||
     asset.kind === 'image-ascii';
 
@@ -254,7 +256,7 @@ function dragHint(kind: ProjectAsset['kind']): string {
   if (kind === 'text' || kind === 'ascii' || kind === 'image-ascii') {
     return 'Drag onto timeline or click to insert at playhead';
   }
-  if (kind === 'palette') return 'Apply this palette to the active scene';
+  if (kind === 'palette') return 'Saved palette — engine tokens land in a future iteration';
   if (kind === 'data') return 'Inject this data block into the active scene';
   return 'Use this asset';
 }

@@ -22,7 +22,6 @@ import {
   PROVIDER_ORDER,
   type ModelProviderConfig,
 } from '../state/modelProviders';
-import type { RecentScene } from '../state/storage';
 import { Button, Label, Panel, Phos, Segmented, SliderRow } from './components';
 import { MiniPreview } from './MiniPreview';
 
@@ -1069,21 +1068,6 @@ export function SceneSummaryPanel({ scene }: { scene: ParsedScene }) {
   );
 }
 
-export function RecentScenesPanel({ recents, onOpen }: { recents: RecentScene[]; onOpen: (recent: RecentScene) => void }) {
-  return (
-    <Panel title="RECENT" flags={`${recents.length}`} dense flush>
-      <div className="recent-list">
-        {recents.length === 0 && <p className="surface-copy">No saved recent scenes.</p>}
-        {recents.map((recent) => (
-          <button key={recent.id} onClick={() => onOpen(recent)}>
-            <strong>{recent.name}</strong>
-            <small>{new Date(recent.updatedAt).toLocaleString()}</small>
-          </button>
-        ))}
-      </div>
-    </Panel>
-  );
-}
 
 function paletteGradient(value: string) {
   const colors = value.split(',');
