@@ -56,24 +56,30 @@ import type {
 import { DEFAULT_APPEARANCE } from '../engine/types';
 import { createExportJob, EXPORT_TARGETS, type ExportJob, type ExportTarget } from '../export/queue';
 import type { LibraryScene } from '../scenes/library';
-import { saveSceneRecord } from '../state/sceneDb';
 import type { ModelProviderConfig } from '../state/modelProviders';
 import type { DirectorProposal } from '../state/types';
 import {
   loadAppearance,
-  loadDsl,
   loadModelProviders,
   loadProvider,
   loadRenderer,
   saveAppearance,
-  saveDsl,
   saveModelProviders,
   saveProvider,
   saveRenderer,
-  loadRecentScenes,
-  touchRecentScene,
-  type RecentScene,
 } from '../state/storage';
+import { saveProject as persistProject } from '../state/projectDb';
+import {
+  addScene,
+  duplicateScene as duplicateProjectScene,
+  patchScene,
+  removeScene,
+  renameScene,
+  type Project,
+  type SceneId,
+} from '../state/projectSchema';
+import { clearLegacyState, loadOrInitActiveProject } from '../state/projectMigration';
+import { DEFAULT_DSL } from '../engine/dsl';
 import { Button, Label, Panel, Phos, Splitter } from './components';
 import { DirectorPanel } from './DirectorPanel';
 import { EnginePreview } from './EnginePreview';
@@ -90,8 +96,8 @@ import {
   SceneSummaryPanel,
   SettingsSurface,
   StartSurface,
-  RecentScenesPanel,
 } from './Surfaces';
+import { ProjectPanel } from './ProjectPanel';
 import { Timeline } from './Timeline';
 
 type AppView =
@@ -139,14 +145,14 @@ const VIEWPORT_LOCK_QUERY = '(max-width: 759px), (max-height: 519px)';
 
 export function App() {
   const [view, setView] = useState<AppView>(() => parseHashView());
-  const [dsl, setDsl] = useState(loadDsl);
+  const [project, setProject] = useState<Project | null>(null);
+  const [dsl, setDsl] = useState<string>(DEFAULT_DSL);
   const [previewDsl, setPreviewDsl] = useState<string | null>(null);
   const [appearance, setAppearance] = useState<Appearance>(() => ({ ...DEFAULT_APPEARANCE, ...loadAppearance() }));
   const [renderer, setRenderer] = useState<RendererKind>(loadRenderer);
   const [provider, setProvider] = useState<ProviderKind>(loadProvider);
   const [modelProviders, setModelProviders] = useState<Record<ProviderKind, ModelProviderConfig>>(loadModelProviders);
   const [jobs, setJobs] = useState<ExportJob[]>([]);
-  const [recents, setRecents] = useState<RecentScene[]>(loadRecentScenes);
   const [playing, setPlaying] = useState(true);
   const [importError, setImportError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -225,12 +231,48 @@ export function App() {
     });
   }, [dsl]);
 
-  useEffect(() => saveDsl(dsl), [dsl]);
+  // Boot: load (or migrate) the active project, then seed the editor.
   useEffect(() => {
-    const parsed = parseScene(dsl);
-    setRecents(touchRecentScene(parsed.name, dsl));
-    void saveSceneRecord(parsed.name, dsl).catch(() => undefined);
-  }, [dsl]);
+    let cancelled = false;
+    const seed = (typeof window !== 'undefined' && window.localStorage.getItem('phosphor.scene.dsl')) || DEFAULT_DSL;
+    loadOrInitActiveProject(seed)
+      .then((loaded) => {
+        if (cancelled) return;
+        setProject(loaded);
+        const active = loaded.scenes.find((s) => s.id === loaded.activeSceneId);
+        setDsl(active?.dsl ?? loaded.scenes[0]?.dsl ?? DEFAULT_DSL);
+        clearLegacyState();
+      })
+      .catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn('Phosphor project load failed:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Sync the active scene's dsl back into the project (debounced) and persist.
+  useEffect(() => {
+    if (!project || !project.activeSceneId) return;
+    const active = project.scenes.find((s) => s.id === project.activeSceneId);
+    if (!active || active.dsl === dsl) return;
+    const handle = window.setTimeout(() => {
+      const parsed = parseScene(dsl);
+      const next = patchScene(project, project.activeSceneId!, {
+        dsl,
+        name: parsed.name || active.name,
+        durationMs: parsed.duration > 0 ? parsed.duration : active.durationMs,
+      });
+      setProject(next);
+      void persistProject(next).catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn('Phosphor project save failed:', error);
+      });
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [dsl, project]);
+
   useEffect(() => saveAppearance(appearance), [appearance]);
   useEffect(() => saveRenderer(renderer), [renderer]);
   useEffect(() => saveProvider(provider), [provider]);
@@ -498,11 +540,104 @@ export function App() {
     }
   }
 
-  function openRecent(recent: RecentScene) {
-    commitDsl(recent.dsl);
+  // Save the current dsl into the active scene before mutating the project.
+  // Returns the freshly-merged project so callers can chain mutations.
+  function flushActiveScene(input: Project | null = project): Project | null {
+    if (!input || !input.activeSceneId) return input;
+    const active = input.scenes.find((s) => s.id === input.activeSceneId);
+    if (!active || active.dsl === dsl) return input;
+    const parsed = parseScene(dsl);
+    return patchScene(input, input.activeSceneId, {
+      dsl,
+      name: parsed.name || active.name,
+      durationMs: parsed.duration > 0 ? parsed.duration : active.durationMs,
+    });
+  }
+
+  function applyProject(next: Project): void {
+    setProject(next);
+    void persistProject(next).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn('Phosphor project save failed:', error);
+    });
+  }
+
+  function selectSceneById(id: SceneId) {
+    if (!project || project.activeSceneId === id) return;
+    const flushed = flushActiveScene(project) ?? project;
+    const switched: Project = { ...flushed, activeSceneId: id, updatedAt: new Date().toISOString() };
+    const target = switched.scenes.find((s) => s.id === id);
+    if (!target) return;
+    applyProject(switched);
+    setDsl(target.dsl);
+    setPreviewDsl(null);
+    setPast([]);
+    setFuture([]);
+    setSelectedEventIds(new Set());
     setTick(0);
     setView('author');
-    selectOne(null);
+  }
+
+  function addEmptyScene() {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    const next = addScene(flushed, {
+      name: 'untitled_scene',
+      dsl: 'scene untitled_scene 1.6s\n# new scene — describe the motion in .me notation\nat 0ms type "READY" slowly',
+      durationMs: 1600,
+    });
+    applyProject(next);
+    const newScene = next.scenes[next.scenes.length - 1];
+    if (newScene) {
+      setDsl(newScene.dsl);
+      setPreviewDsl(null);
+      setPast([]);
+      setFuture([]);
+      setSelectedEventIds(new Set());
+      setTick(0);
+      setView('author');
+    }
+  }
+
+  function renameSceneById(id: SceneId, name: string) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject(renameScene(flushed, id, name));
+  }
+
+  function duplicateSceneById(id: SceneId) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    const next = duplicateProjectScene(flushed, id);
+    applyProject(next);
+    const dup = next.scenes[next.scenes.length - 1];
+    if (dup) selectSceneById(dup.id);
+  }
+
+  function deleteSceneById(id: SceneId) {
+    if (!project) return;
+    if (project.scenes.length <= 1) return;
+    const wasActive = project.activeSceneId === id;
+    const flushed = wasActive ? project : flushActiveScene(project) ?? project;
+    const next = removeScene(flushed, id);
+    applyProject(next);
+    if (wasActive && next.activeSceneId) {
+      const target = next.scenes.find((s) => s.id === next.activeSceneId);
+      if (target) {
+        setDsl(target.dsl);
+        setPreviewDsl(null);
+        setPast([]);
+        setFuture([]);
+        setSelectedEventIds(new Set());
+        setTick(0);
+      }
+    }
+  }
+
+  function renameProject(name: string) {
+    if (!project) return;
+    const flushed = flushActiveScene(project) ?? project;
+    applyProject({ ...flushed, name, updatedAt: new Date().toISOString() });
   }
 
   const moveEvent = useCallback(
@@ -934,7 +1069,10 @@ export function App() {
             </button>
           ))}
         </nav>
-        <span className="titlebar__scene">{scene.name}</span>
+        <span className="titlebar__scene">
+          {project ? <><span className="titlebar__project">{project.name}</span> / </> : null}
+          {scene.name}
+        </span>
         {previewDsl && <span className="preview-badge">previewing proposal</span>}
         {importError && <span className="import-error">{importError}</span>}
         <div className="titlebar__spacer" />
@@ -981,7 +1119,18 @@ export function App() {
 
       {view === 'author' ? (
         <>
-          <aside className="left-stack" aria-label="Director and notation">
+          <aside className="left-stack" aria-label="Project, director, and notation">
+            {project && (
+              <ProjectPanel
+                project={project}
+                onSelectScene={selectSceneById}
+                onAddScene={addEmptyScene}
+                onRenameScene={renameSceneById}
+                onDuplicateScene={duplicateSceneById}
+                onDeleteScene={deleteSceneById}
+                onRenameProject={renameProject}
+              />
+            )}
             <DirectorPanel
               dsl={dsl}
               provider={provider}
@@ -1178,9 +1327,19 @@ export function App() {
           )}
           {view === 'docs' && <DocsSurface />}
           {view === 'empty' && <EmptySurface onForkScene={forkLibraryScene} onOpenAuthor={() => setView('author')} />}
-          <aside className="surface-side" aria-label="Scene state and recents">
+          <aside className="surface-side" aria-label="Project and scene state">
+            {project && (
+              <ProjectPanel
+                project={project}
+                onSelectScene={selectSceneById}
+                onAddScene={addEmptyScene}
+                onRenameScene={renameSceneById}
+                onDuplicateScene={duplicateSceneById}
+                onDeleteScene={deleteSceneById}
+                onRenameProject={renameProject}
+              />
+            )}
             <SceneSummaryPanel scene={scene} />
-            <RecentScenesPanel recents={recents} onOpen={openRecent} />
           </aside>
         </section>
       )}

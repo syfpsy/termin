@@ -826,6 +826,119 @@ at 0ms type "{{users}}/{{ghost}}"`);
   );
 }
 
+// Project schema: normalize, mutate, round-trip
+{
+  const {
+    normalizeProject,
+    makeEmptyProject,
+    addScene,
+    duplicateScene,
+    patchScene,
+    removeScene,
+    renameScene,
+    PROJECT_SCHEMA_ID,
+    PROJECT_SCHEMA_VERSION,
+  } = await import('../src/state/projectSchema');
+
+  // makeEmptyProject seeds one scene, sets it active
+  const empty = makeEmptyProject('Demo', DEFAULT_DSL, 'first_scene');
+  assert.equal(empty.schema, PROJECT_SCHEMA_ID, 'schema id stamped');
+  assert.equal(empty.schemaVersion, PROJECT_SCHEMA_VERSION, 'schema version stamped');
+  assert.equal(empty.scenes.length, 1, 'starts with one scene');
+  assert.equal(empty.activeSceneId, empty.scenes[0].id, 'first scene is active');
+  assert.equal(empty.scenes[0].dsl, DEFAULT_DSL);
+  assert.deepEqual(empty.assets, [], 'no assets initially');
+  assert.deepEqual(empty.renderPresets, [], 'no presets initially');
+
+  // addScene appends and switches active
+  const withTwo = addScene(empty, { name: 'second', dsl: 'scene s 1s\nat 0ms type "x"', durationMs: 1000 });
+  assert.equal(withTwo.scenes.length, 2, 'second scene added');
+  assert.equal(withTwo.activeSceneId, withTwo.scenes[1].id, 'add switches active');
+
+  // patchScene updates fields and bumps updatedAt
+  const patched = patchScene(withTwo, withTwo.scenes[0].id, { name: 'renamed', dsl: 'scene renamed 1s' });
+  assert.equal(patched.scenes[0].name, 'renamed');
+  assert.equal(patched.scenes[0].dsl, 'scene renamed 1s');
+  assert.notEqual(patched.scenes[0].updatedAt, withTwo.scenes[0].updatedAt, 'updatedAt bumps');
+
+  // renameScene is sugar for patchScene
+  const renamed = renameScene(withTwo, withTwo.scenes[0].id, 'fresh_name');
+  assert.equal(renamed.scenes[0].name, 'fresh_name');
+
+  // duplicateScene clones the dsl and gives it a new id
+  const dup = duplicateScene(withTwo, withTwo.scenes[0].id);
+  assert.equal(dup.scenes.length, 3, 'duplicate adds a third scene');
+  assert.notEqual(dup.scenes[2].id, withTwo.scenes[0].id, 'duplicate has fresh id');
+  assert.equal(dup.scenes[2].dsl, withTwo.scenes[0].dsl, 'duplicate copies dsl');
+  assert.equal(dup.activeSceneId, dup.scenes[2].id, 'duplicate becomes active');
+
+  // removeScene refuses to remove the last scene
+  const removedToOne = removeScene(empty, empty.scenes[0].id);
+  assert.equal(removedToOne.scenes.length, 1, 'cannot remove the only scene');
+
+  // removeScene reassigns active when active is removed
+  const afterRemove = removeScene(withTwo, withTwo.activeSceneId!);
+  assert.equal(afterRemove.scenes.length, 1, 'removed scene is gone');
+  assert.equal(afterRemove.activeSceneId, afterRemove.scenes[0].id, 'active reassigned');
+
+  // normalizeProject rejects wrong schema id
+  const wrongSchema = normalizeProject({ schema: 'something.else', schemaVersion: 1 });
+  assert.equal(wrongSchema, null, 'wrong schema id rejected');
+
+  // normalizeProject rejects wrong schema version
+  const wrongVersion = normalizeProject({ schema: PROJECT_SCHEMA_ID, schemaVersion: 99 });
+  assert.equal(wrongVersion, null, 'unknown schema version rejected');
+
+  // normalizeProject round-trips a serialized project
+  const serialized = JSON.parse(JSON.stringify(empty));
+  const restored = normalizeProject(serialized);
+  assert.ok(restored, 'valid project round-trips');
+  assert.equal(restored?.id, empty.id, 'id preserved');
+  assert.equal(restored?.scenes.length, 1);
+  assert.equal(restored?.scenes[0].dsl, DEFAULT_DSL);
+
+  // normalizeProject drops scenes with no dsl and unknown asset kinds
+  const dirty = normalizeProject({
+    schema: PROJECT_SCHEMA_ID,
+    schemaVersion: 1,
+    id: 'p1',
+    name: 'Dirty',
+    createdAt: '2026-04-25T00:00:00.000Z',
+    updatedAt: '2026-04-25T00:00:00.000Z',
+    scenes: [
+      { id: 's1', name: 'ok', dsl: 'scene ok 1s\nat 0ms type "x"', durationMs: 1000, createdAt: '', updatedAt: '' },
+      { id: 's2', name: 'broken', dsl: '', durationMs: 0, createdAt: '', updatedAt: '' },
+      'not an object',
+    ],
+    assets: [
+      { id: 'a1', kind: 'text', name: 'snippet', text: 'hi', createdAt: '', updatedAt: '' },
+      { id: 'a2', kind: 'unknown-future-kind', name: 'mystery', createdAt: '', updatedAt: '' },
+      { id: 'a3', kind: 'palette', name: 'no-tones', createdAt: '', updatedAt: '' }, // missing tones
+    ],
+  });
+  assert.ok(dirty, 'partially-broken project still loads');
+  assert.equal(dirty?.scenes.length, 1, 'empty-dsl scene dropped');
+  assert.equal(dirty?.assets.length, 1, 'unknown asset kind + palette without tones dropped');
+  assert.equal(dirty?.assets[0].kind, 'text');
+
+  // Forward-compat: unknown future asset kind is silently dropped, not crashed on
+  const future = normalizeProject({
+    schema: PROJECT_SCHEMA_ID,
+    schemaVersion: 1,
+    id: 'p2',
+    name: 'F',
+    createdAt: '',
+    updatedAt: '',
+    scenes: [{ id: 's', name: 'ok', dsl: 'scene ok 1s', durationMs: 1000, createdAt: '', updatedAt: '' }],
+    assets: [{ id: 'a', kind: 'video', name: 'oops', createdAt: '', updatedAt: '' }],
+    renderPresets: [{ id: 'r', name: 'bad-target', target: 'unknown-target', createdAt: '' }],
+    futureField: 'whatever', // unknown top-level field tolerated
+  });
+  assert.ok(future, 'forward-compat: unknown asset/preset/top-level fields tolerated');
+  assert.equal(future?.assets.length, 0, 'unknown asset kind dropped');
+  assert.equal(future?.renderPresets.length, 0, 'unknown render target dropped');
+}
+
 console.log(
   `export smoke passed: ${bundle.scene.events.length} events, loop URL ${loopResult.encodedLength}B/${loopResult.bytes}B, svg poster ${svg.length}B / animated ${animatedSvg.length}B`,
 );
