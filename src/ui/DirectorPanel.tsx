@@ -1,11 +1,28 @@
-import { Bot, Check, Eye, FileCode2, GitCompareArrows, RefreshCw, Send, WandSparkles } from 'lucide-react';
+import { Bot, Check, Eye, FileCode2, GitCompareArrows, RefreshCw, Send } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { requestDirector } from '../director/client';
 import type { ProviderKind } from '../engine/types';
-import { DEFAULT_MODEL_PROVIDERS, providerHasUserKey, PROVIDER_ORDER, type ModelProviderConfig } from '../state/modelProviders';
+import { DEFAULT_MODEL_PROVIDERS, providerHasUserKey, type ModelProviderConfig } from '../state/modelProviders';
 import type { DirectorMessage, DirectorProposal } from '../state/types';
 import { Button, Panel } from './components';
 import { diffLines } from './lineDiff';
+
+/**
+ * Why these models? Phosphor's prompts are short structured-edit
+ * tasks ("add glitch burst", "loop it") on a tiny DSL. The director
+ * benefits from a model that follows format instructions tightly and
+ * keeps line numbers / event ordering stable. Anthropic Sonnet
+ * + DeepSeek-Chat both nail this; OpenRouter is fine when you want
+ * to A/B different OSS checkpoints. Avoid models that creatively
+ * rewrite — they break diffs.
+ */
+const PROVIDER_HINT: Record<ProviderKind, string> = {
+  anthropic: 'Recommended. Claude Sonnet handles small structured edits cleanly and rarely rewrites unrelated lines.',
+  openrouter: 'Use when you want to swap to a specific OSS checkpoint or compare providers.',
+  deepseek: 'Strong at structured DSL edits, very cheap. Good fallback if Anthropic is rate-limited.',
+  openai: 'GPT-5 / GPT-5-mini work. Slightly more verbose than Claude on small edits.',
+  mock: 'No API call — returns canned responses for offline development.',
+};
 
 type DirectorPanelProps = {
   dsl: string;
@@ -119,33 +136,35 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
     }
   }
 
+  // Resolve the active model name — falls back to the env-default reported
+  // by /api/providers if the user has not set a per-provider model yet.
+  const activeModel = activeConfig.model || status?.models[provider as keyof typeof status.models] || '';
+  const providerReady =
+    provider === 'mock' ||
+    providerHasUserKey(activeConfig) ||
+    Boolean(status?.[provider as 'anthropic' | 'openrouter' | 'deepseek' | 'openai']);
+
   return (
     <Panel
       id="director"
       title="DIRECTOR"
       tone="cyan"
-      flags={provider}
+      flags={activeModel ? `${provider} · ${activeModel}` : provider}
       flush
       className="director-panel"
       tools={
-        <select className="provider-select" value={provider} onChange={(event) => onProviderChange(event.target.value as ProviderKind)}>
-          {PROVIDER_ORDER.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        <button
+          type="button"
+          className="director-panel__model-hint"
+          title={PROVIDER_HINT[provider]}
+          aria-label={`${provider} — ${PROVIDER_HINT[provider]}`}
+        >
+          {providerReady ? '●' : '○'}
+        </button>
       }
-      footer="Ctrl+Enter run - preview does not commit"
+      footer="Ctrl+Enter run · preview does not commit"
     >
       <div className="director-log">
-        <div className="provider-status">
-          <span data-ready={providerHasUserKey(configs.anthropic) || Boolean(status?.anthropic)}>anthropic {configs.anthropic.model || status?.models.anthropic}</span>
-          <span data-ready={providerHasUserKey(configs.openrouter) || Boolean(status?.openrouter)}>openrouter {configs.openrouter.model || status?.models.openrouter}</span>
-          <span data-ready={providerHasUserKey(configs.deepseek) || Boolean(status?.deepseek)}>deepseek {configs.deepseek.model || status?.models.deepseek}</span>
-          <span data-ready={providerHasUserKey(configs.openai) || Boolean(status?.openai)}>openai {configs.openai.model || status?.models.openai}</span>
-          <span data-ready={provider === 'mock'}>fallback mock</span>
-        </div>
         {messages.map((message) => (
           <div key={message.id} className={`chat-turn chat-turn--${message.role}`}>
             <div className="chat-turn__meta">
@@ -229,10 +248,9 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
         }}
       >
         <div className="director-input__box">
-          <WandSparkles size={14} />
           <textarea
             value={input}
-            placeholder="describe a motion..."
+            placeholder="describe a motion…  ⌘↵"
             aria-label="Director prompt"
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -242,9 +260,15 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
               }
             }}
           />
-          <Button type="submit" tone="prim" icon={<Send size={13} />} disabled={pending}>
-            run
-          </Button>
+          <button
+            type="submit"
+            className="director-input__run"
+            aria-label="Run director (Ctrl/Cmd + Enter)"
+            disabled={pending}
+            title={pending ? 'Drafting…' : 'Run (Ctrl+Enter)'}
+          >
+            <Send size={12} />
+          </button>
         </div>
         <div className="suggestions">
           {SUGGESTIONS.map((suggestion) => (

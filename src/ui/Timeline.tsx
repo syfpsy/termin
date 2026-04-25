@@ -400,18 +400,6 @@ export function Timeline(props: TimelineProps) {
     if (!selectedEventIds.has(event.id)) onSelectOne(event.id);
   }
 
-  function handleLanePointerDown(pointerEvent: React.PointerEvent<HTMLDivElement>) {
-    if (drag) return;
-    const target = pointerEvent.target as HTMLElement;
-    if (target.closest('.timeline__bar, .timeline__resize')) return;
-    pointerEvent.stopPropagation();
-    const lane = pointerEvent.currentTarget;
-    const rect = lane.getBoundingClientRect();
-    const ratio = (pointerEvent.clientX - rect.left) / Math.max(1, rect.width);
-    const ms = clampMs(ratio * scene.duration, 0, scene.duration);
-    setAdderAt(ms);
-  }
-
   function handleTracksPointerDown(pointerEvent: React.PointerEvent<HTMLDivElement>) {
     const target = pointerEvent.target as HTMLElement;
     if (target.closest('.timeline__bar, .timeline__resize, .timeline__lane')) return;
@@ -700,7 +688,7 @@ export function Timeline(props: TimelineProps) {
                 <span className="timeline__effect" data-tone={tone}>
                   {event.effect}
                 </span>
-                <div className="timeline__lane" onPointerDown={handleLanePointerDown} role="presentation">
+                <div className="timeline__lane" role="presentation">
                   <span
                     className={`timeline__bar ${dragging ? 'timeline__bar--dragging' : ''}`}
                     data-tone={tone}
@@ -1343,18 +1331,64 @@ type EffectPickerProps = {
 };
 
 function EffectPicker({ atMs, onPick, onCancel }: EffectPickerProps) {
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the filter so the user can type immediately. The picker is the
+  // only input target on screen while it is open, and skipping the focus would
+  // require a tab to start filtering — friction the explicit "add" entrypoint
+  // is supposed to remove.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Esc closes the picker, and so does any pointerdown outside the dialog.
+  // We listen on `pointerdown` (not `click`) so the dismissal happens before
+  // any click handler on the underlying timeline can fire — otherwise opening
+  // the picker and then clicking out could re-trigger an unrelated action.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCancel();
+      }
+    }
+    function onPointer(event: PointerEvent) {
+      if (!containerRef.current) return;
+      if (event.target instanceof Node && containerRef.current.contains(event.target)) return;
+      onCancel();
+    }
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [onCancel]);
+
   const groups = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = needle
+      ? ADDABLE_EFFECTS.filter(
+          (effect) =>
+            effect.label.toLowerCase().includes(needle) || effect.category.toLowerCase().includes(needle),
+        )
+      : ADDABLE_EFFECTS;
     const map = new Map<string, typeof ADDABLE_EFFECTS>();
-    for (const effect of ADDABLE_EFFECTS) {
+    for (const effect of filtered) {
       const list = map.get(effect.category) ?? [];
       list.push(effect);
       map.set(effect.category, list);
     }
     return Array.from(map.entries());
-  }, []);
+  }, [query]);
+
+  const firstMatch = groups[0]?.[1]?.[0]?.value;
 
   return (
     <div
+      ref={containerRef}
       className="effect-picker"
       role="dialog"
       aria-label="Choose effect to add"
@@ -1367,19 +1401,38 @@ function EffectPicker({ atMs, onPick, onCancel }: EffectPickerProps) {
           ×
         </button>
       </header>
+      <input
+        ref={inputRef}
+        type="text"
+        className="effect-picker__filter"
+        placeholder="filter effects… (Enter picks top match, Esc closes)"
+        value={query}
+        spellCheck={false}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && firstMatch) {
+            event.preventDefault();
+            onPick(firstMatch);
+          }
+        }}
+      />
       <div className="effect-picker__groups">
-        {groups.map(([category, list]) => (
-          <div key={category} className="effect-picker__group">
-            <span className="effect-picker__group-label">{category}</span>
-            <div className="effect-picker__grid">
-              {list.map((effect) => (
-                <button key={effect.value} type="button" onClick={() => onPick(effect.value)}>
-                  {effect.label}
-                </button>
-              ))}
+        {groups.length === 0 ? (
+          <p className="effect-picker__empty">no effects match "{query}"</p>
+        ) : (
+          groups.map(([category, list]) => (
+            <div key={category} className="effect-picker__group">
+              <span className="effect-picker__group-label">{category}</span>
+              <div className="effect-picker__grid">
+                {list.map((effect) => (
+                  <button key={effect.value} type="button" onClick={() => onPick(effect.value)}>
+                    {effect.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

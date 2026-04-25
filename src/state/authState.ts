@@ -21,6 +21,20 @@ export async function getCurrentUser(): Promise<User | null> {
   return session?.user ?? null;
 }
 
+/**
+ * The Supabase Redirect URL allow-list matches by string prefix. Wildcard
+ * patterns like `https://termin-peach.vercel.app/**` require AT LEAST one
+ * path segment after the host, so we must always send a path — even if
+ * just `/`. Sending the bare origin caused Supabase to silently fall back
+ * to the Site URL without tokens, which is what made post-redirect
+ * sign-ins look like they "didn't work".
+ */
+function redirectUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const origin = window.location.origin;
+  return origin.endsWith('/') ? origin : `${origin}/`;
+}
+
 export async function signInWithMagicLink(email: string): Promise<SignInResult> {
   if (!supabase) return { ok: false, error: 'Cloud is not configured.' };
   const trimmed = email.trim();
@@ -28,7 +42,7 @@ export async function signInWithMagicLink(email: string): Promise<SignInResult> 
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmed,
     options: {
-      emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+      emailRedirectTo: redirectUrl(),
     },
   });
   if (error) return { ok: false, error: error.message };
@@ -40,7 +54,7 @@ export async function signInWithGoogle(): Promise<SignInResult> {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+      redirectTo: redirectUrl(),
     },
   });
   if (error) return { ok: false, error: error.message };

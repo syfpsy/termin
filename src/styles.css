@@ -771,29 +771,26 @@ input {
   gap: 13px;
 }
 
-.provider-status {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 4px;
-  border: 1px dashed var(--bezel);
-  background: var(--surface-overlay);
-  padding: 7px 8px;
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.director-panel__model-hint {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--bezel);
+  background: transparent;
   color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  padding: 0;
 }
 
-.provider-status span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.provider-status span[data-ready='true'] {
-  color: var(--green);
-  text-shadow: 0 0 4px rgba(127, 224, 147, 0.22);
+.director-panel__model-hint:hover,
+.director-panel__model-hint:focus-visible {
+  border-color: var(--phos);
+  color: var(--phos);
+  outline: 0;
 }
 
 .chat-turn__meta,
@@ -962,14 +959,40 @@ input {
 }
 
 .director-input__box {
+  position: relative;
   border: 1px solid var(--bezel-hi);
   background: var(--bg);
   min-height: 68px;
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
-  gap: 8px;
   padding: 8px 10px;
+  padding-right: 36px;
   color: var(--phos);
+}
+
+.director-input__run {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--bezel-hi);
+  background: var(--panel);
+  color: var(--phos);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.director-input__run:hover:not(:disabled) {
+  background: var(--phos);
+  color: var(--bg);
+  border-color: var(--phos);
+}
+
+.director-input__run:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .director-input textarea,
@@ -1007,14 +1030,6 @@ input {
   font-size: 10px;
   padding: 3px 8px;
   cursor: pointer;
-}
-
-.provider-select {
-  height: 22px;
-  border: 1px solid var(--bezel-hi);
-  background: var(--bg);
-  color: var(--ink);
-  font-size: 10px;
 }
 
 .notation-editor {
@@ -1925,6 +1940,35 @@ input {
   outline: none;
   border-color: var(--phos-dim);
   box-shadow: var(--focus-ring);
+}
+
+.effect-picker__filter {
+  border: 1px solid var(--bezel-hi);
+  background: var(--bg);
+  color: var(--ink);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  outline: 0;
+}
+
+.effect-picker__filter::placeholder {
+  color: var(--ink-faint);
+  letter-spacing: 0;
+}
+
+.effect-picker__filter:focus-visible {
+  border-color: var(--phos);
+  box-shadow: var(--focus-ring);
+}
+
+.effect-picker__empty {
+  color: var(--ink-muted);
+  font-size: 11px;
+  margin: 0;
+  padding: 8px 0;
+  text-align: center;
 }
 
 .effect-picker__groups {

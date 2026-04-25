@@ -22,11 +22,12 @@ if (url && anonKey) {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      // Implicit flow: magic-link emails redirect to `/#access_token=...`
-      // and we have a session immediately on URL parse. PKCE is more
-      // secure but requires the verifier from the original tab/device,
-      // which breaks the "click email on phone, app on laptop" UX.
-      flowType: 'implicit',
+      // Default PKCE flow: more secure, the recommended Supabase v2 path.
+      // Magic-link emails redirect to `?code=...` and Supabase JS exchanges
+      // the code for a session on URL parse. Cross-device click works
+      // because the verifier is read from the link itself, not localStorage.
+      flowType: 'pkce',
+      debug: import.meta.env.DEV,
     },
   });
 }
