@@ -3,11 +3,9 @@ import { Cloud, Download, Globe, Library as LibraryIcon, LogIn, LogOut, Lock, Se
 import { useEffect, useState } from 'react';
 import {
   isSupabaseConfigured,
-  onAuthStateChange,
   signInWithGoogle,
   signInWithMagicLink,
   signOut,
-  getCurrentSession,
 } from '../state/authState';
 import {
   listMyCloudProjects,
@@ -21,14 +19,15 @@ import { Panel } from './components';
 
 type CloudPanelProps = {
   project: Project | null;
+  /** Session is owned by App (single source of truth) and passed in. */
+  session: Session | null;
   onProjectFromCloud: (project: Project) => void;
   onError?: (message: string) => void;
 };
 
 type View = 'auth' | 'mine' | 'public';
 
-export function CloudPanel({ project, onProjectFromCloud, onError }: CloudPanelProps) {
-  const [session, setSession] = useState<Session | null>(null);
+export function CloudPanel({ project, session, onProjectFromCloud, onError }: CloudPanelProps) {
   const [view, setView] = useState<View>('mine');
   const [mine, setMine] = useState<CloudProjectRow[]>([]);
   const [published, setPublished] = useState<CloudProjectRow[]>([]);
@@ -36,21 +35,6 @@ export function CloudPanel({ project, onProjectFromCloud, onError }: CloudPanelP
   const [emailDraft, setEmailDraft] = useState('');
   const [magicSentTo, setMagicSentTo] = useState<string | null>(null);
   const [signinError, setSigninError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    let cancelled = false;
-    void getCurrentSession().then((current) => {
-      if (!cancelled) setSession(current);
-    });
-    const unsub = onAuthStateChange((next) => {
-      setSession(next);
-    });
-    return () => {
-      cancelled = true;
-      unsub();
-    };
-  }, []);
 
   // Refresh the user's cloud project list whenever a session lands or the
   // active local project's id/name changes (so newly-pushed rows appear).

@@ -24,6 +24,8 @@ import {
 } from '../state/modelProviders';
 import { Button, Label, Panel, Phos, Segmented, SliderRow } from './components';
 import { MiniPreview } from './MiniPreview';
+import { AccountPanel } from './AccountPanel';
+import type { Session } from '@supabase/supabase-js';
 
 type SharedSurfaceProps = {
   dsl: string;
@@ -34,6 +36,7 @@ type SharedSurfaceProps = {
   providerConfigs: Record<ProviderKind, ModelProviderConfig>;
   jobs: ExportJob[];
   animatedProps?: Set<string>;
+  session?: Session | null;
   onForkScene: (scene: LibraryScene) => void;
   onDslChange: (dsl: string) => void;
   onAppearanceChange: (patch: Partial<Appearance>) => void;
@@ -777,6 +780,7 @@ export function SettingsSurface({
   renderer,
   provider,
   animatedProps,
+  session,
   onAppearanceChange,
   onRendererChange,
   onProviderChange,
@@ -786,6 +790,7 @@ export function SettingsSurface({
   const animateBinding = onAppearanceKeyframe;
   return (
     <section className="surface settings-surface">
+      <AccountPanel session={session ?? null} />
       <Panel id="settings-appearance" title="SETTINGS / APPEARANCE" flags="persisted locally">
         <div className="settings-grid">
           <div className="settings-group">

@@ -22,8 +22,11 @@ if (url && anonKey) {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      // Phosphor stays single-tab focused; default storage (localStorage)
-      // is fine. Override here if we ever need multi-tab session sharing.
+      // Implicit flow: magic-link emails redirect to `/#access_token=...`
+      // and we have a session immediately on URL parse. PKCE is more
+      // secure but requires the verifier from the original tab/device,
+      // which breaks the "click email on phone, app on laptop" UX.
+      flowType: 'implicit',
     },
   });
 }

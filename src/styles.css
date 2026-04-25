@@ -2520,26 +2520,21 @@ input {
 }
 
 .titlebar-menu__panel {
-  position: absolute;
-  top: calc(100% + 2px);
-  z-index: 40;
+  /* Rendered through a React portal into document.body — top/left/right
+     come from inline styles set by the trigger's bounding rect. */
+  position: fixed;
+  z-index: 9999;
   min-inline-size: 220px;
   max-inline-size: 280px;
+  max-block-size: calc(100dvh - 60px);
+  overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--bezel-hi);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   padding: 4px 0;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 11px;
   color: var(--ink);
-}
-
-.titlebar-menu__panel--left {
-  inset-inline-start: 0;
-}
-
-.titlebar-menu__panel--right {
-  inset-inline-end: 0;
 }
 
 .titlebar-menu__preface {
@@ -2822,6 +2817,64 @@ input {
 .slider-row__keyframe--disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* ---- account panel ---- */
+
+.account-panel {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-panel--signin {
+  gap: 8px;
+}
+
+.account-panel__row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.account-panel__row code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-panel__label {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.account-panel__actions {
+  display: flex;
+  gap: 6px;
+  margin-block-start: 4px;
+}
+
+.account-panel__note {
+  margin: 6px 0 0;
+  font-size: 10px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+.account-panel__note code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--ink);
 }
 
 .surface-stage {

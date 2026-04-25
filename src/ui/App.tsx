@@ -93,6 +93,13 @@ import {
 import { clearLegacyState, loadOrInitActiveProject, writeActiveProjectId } from '../state/projectMigration';
 import { readProjectFile, writeProjectFile, PROJECT_FILE_MIME } from '../export/projectFile';
 import { DEFAULT_DSL } from '../engine/dsl';
+import type { Session } from '@supabase/supabase-js';
+import {
+  getCurrentSession,
+  isSupabaseConfigured,
+  onAuthStateChange,
+  signOut,
+} from '../state/authState';
 import { Button, Label, Panel, Phos, Splitter } from './components';
 import { DirectorPanel } from './DirectorPanel';
 import { EnginePreview } from './EnginePreview';
@@ -165,6 +172,7 @@ export function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [dsl, setDsl] = useState<string>(DEFAULT_DSL);
   const [previewDsl, setPreviewDsl] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [appearance, setAppearance] = useState<Appearance>(() => ({ ...DEFAULT_APPEARANCE, ...loadAppearance() }));
   const [renderer, setRenderer] = useState<RendererKind>(loadRenderer);
   const [provider, setProvider] = useState<ProviderKind>(loadProvider);
@@ -266,6 +274,24 @@ export function App() {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Global auth listener — single source of truth for the signed-in
+  // session. The CloudPanel and the new account panel both read from
+  // this state instead of running their own listeners.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let cancelled = false;
+    void getCurrentSession().then((current) => {
+      if (!cancelled) setSession(current);
+    });
+    const unsub = onAuthStateChange((next) => {
+      setSession(next);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
     };
   }, []);
 
@@ -1349,6 +1375,41 @@ export function App() {
         <Button icon={<Code2 size={13} />} tone="prim" onClick={() => exportHtmlEmbed(scene.name, dsl, appearance)}>
           html
         </Button>
+        {isSupabaseConfigured && (
+          session ? (
+            <TitlebarMenu
+              label={truncateEmail(session.user.email ?? 'signed in')}
+              align="right"
+              preface={
+                <div className="titlebar-menu__preface">
+                  <span className="titlebar-menu__preface-label">signed in</span>
+                  <strong>{session.user.email ?? session.user.id}</strong>
+                </div>
+              }
+              items={[
+                { kind: 'item', label: 'Account settings', onSelect: () => setView('settings') },
+                { kind: 'divider' },
+                {
+                  kind: 'item',
+                  label: 'Sign out',
+                  danger: true,
+                  onSelect: () => {
+                    void signOut();
+                  },
+                },
+              ]}
+            />
+          ) : (
+            <button
+              type="button"
+              className="titlebar-menu__trigger"
+              onClick={() => setView('settings')}
+              title="Sign in to sync"
+            >
+              sign in
+            </button>
+          )
+        )}
       </header>
 
       {view === 'author' ? (
@@ -1513,6 +1574,7 @@ export function App() {
           <aside className="right-stack" aria-label="Cloud, library, and effects">
             <CloudPanel
               project={project}
+              session={session}
               onProjectFromCloud={loadProjectFromCloud}
               onError={(message) => setImportError(message)}
             />
@@ -1577,6 +1639,7 @@ export function App() {
               providerConfigs={modelProviders}
               jobs={jobs}
               animatedProps={animatedProps}
+              session={session}
               onForkScene={forkLibraryScene}
               onDslChange={setDsl}
               onAppearanceChange={updateAppearance}
@@ -1766,6 +1829,13 @@ function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function truncateEmail(email: string): string {
+  if (email.length <= 22) return email;
+  const [local, domain] = email.split('@');
+  if (!domain) return `${email.slice(0, 19)}…`;
+  return `${local.slice(0, 8)}…@${domain.slice(0, 10)}`;
 }
 
 function triggerProjectDownload(bytes: Uint8Array, filename: string) {
