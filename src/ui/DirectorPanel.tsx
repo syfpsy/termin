@@ -1,5 +1,5 @@
 import { Bot, Check, Eye, FileCode2, GitCompareArrows, RefreshCw, Send } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { requestDirector } from '../director/client';
 import type { ProviderKind } from '../engine/types';
 import { DEFAULT_MODEL_PROVIDERS, providerHasUserKey, type ModelProviderConfig } from '../state/modelProviders';
@@ -54,6 +54,8 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
   const configs = providerConfigs ?? DEFAULT_MODEL_PROVIDERS;
   const activeConfig = providerConfig ?? configs[provider] ?? DEFAULT_MODEL_PROVIDERS[provider];
   const [input, setInput] = useState('');
+  const historyRef = useRef<string[]>([]);
+  const historyIdxRef = useRef<number>(-1);
   const [messages, setMessages] = useState<DirectorMessage[]>([
     {
       id: 'welcome',
@@ -98,6 +100,13 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
       text,
       at: formatClock(),
     };
+
+    // Push to history (deduplicate consecutive identical prompts)
+    const history = historyRef.current;
+    if (history.length === 0 || history[history.length - 1] !== text) {
+      history.push(text);
+    }
+    historyIdxRef.current = -1;
 
     setMessages((current) => [...current, userMessage]);
     setInput('');
@@ -257,6 +266,32 @@ export function DirectorPanel({ dsl, provider, providerConfig, providerConfigs, 
               if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
                 event.preventDefault();
                 void runPrompt(input);
+                return;
+              }
+              // Arrow-up/down: navigate prompt history (only when caret is on first/last line)
+              if (event.key === 'ArrowUp' && !event.shiftKey) {
+                const history = historyRef.current;
+                if (history.length === 0) return;
+                const ta = event.currentTarget;
+                if (ta.selectionStart !== 0) return; // only trigger at start of input
+                event.preventDefault();
+                const nextIdx = historyIdxRef.current === -1
+                  ? history.length - 1
+                  : Math.max(0, historyIdxRef.current - 1);
+                historyIdxRef.current = nextIdx;
+                setInput(history[nextIdx]);
+              }
+              if (event.key === 'ArrowDown' && !event.shiftKey && historyIdxRef.current !== -1) {
+                event.preventDefault();
+                const history = historyRef.current;
+                const nextIdx = historyIdxRef.current + 1;
+                if (nextIdx >= history.length) {
+                  historyIdxRef.current = -1;
+                  setInput('');
+                } else {
+                  historyIdxRef.current = nextIdx;
+                  setInput(history[nextIdx]);
+                }
               }
             }}
           />

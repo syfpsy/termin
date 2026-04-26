@@ -6,8 +6,10 @@ import type { Appearance, ParsedScene, RendererKind } from '../engine/types';
 import { renderBufferToCanvas } from '../engine/renderers/canvasRenderer';
 import { WebGlPhosphorRenderer } from '../engine/renderers/webglRenderer';
 
-const COLS = 96;
-const ROWS = 36;
+export const PREVIEW_COLS = 96;
+export const PREVIEW_ROWS = 36;
+const COLS = PREVIEW_COLS;
+const ROWS = PREVIEW_ROWS;
 
 type EnginePreviewProps = {
   scene: ParsedScene;

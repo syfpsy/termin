@@ -122,6 +122,7 @@ import { AssetPanel } from './AssetPanel';
 import { EffectControlsPanel } from './EffectControlsPanel';
 import { TitlebarMenu } from './TitlebarMenu';
 import { CloudPanel } from './CloudPanel';
+import { PREVIEW_COLS, PREVIEW_ROWS } from './EnginePreview';
 import { LandingPage } from './LandingPage';
 import { Timeline } from './Timeline';
 
@@ -1708,7 +1709,7 @@ export function App() {
         <span className="visually-hidden">Status:</span>
         <span className="statusbar__running">running</span>
         <span>
-          {appearance.tickRate} Hz - {durationTicks} ticks - 96 x 36 cells
+          {appearance.tickRate} Hz - {durationTicks} ticks - {PREVIEW_COLS} x {PREVIEW_ROWS} cells
         </span>
         <span className="titlebar__spacer" />
         <span>
@@ -1837,7 +1838,7 @@ function ViewportLock() {
         <p>
           To watch a shared scene on this device, open a Phosphor loop URL — it works at any size:
         </p>
-        <code>termin-peach.vercel.app/play.html#play=...</code>
+        <code>fosfor.app/play.html#play=...</code>
       </div>
     </main>
   );

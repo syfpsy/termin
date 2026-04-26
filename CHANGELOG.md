@@ -4,6 +4,16 @@ Format: `vMAJOR.MINOR.PATCH` — minor = new feature surface, patch = fix or pol
 
 ---
 
+## v0.2.2 — 2025-04
+**QoL pass — 8 improvements**
+- `EffectControlsPanel.tsx` — sound preset dropdown (`sound:<name>` modifier picker with all 20 presets); "clear offset track" button now appears alongside "clear intensity track" when offset is animated
+- `Timeline.tsx` — click-to-seek on ruler background (bare click seeks, alt/shift+drag still creates loop region); zoom controls (−/+ buttons + `⌘+scroll`, 1×–4×); ruler ticks scroll-sync with tracks when zoomed; `ticksRef` + scroll listener
+- `DirectorPanel.tsx` — prompt history: ArrowUp/Down in the textarea navigates previous prompts (ring buffer, deduplicates consecutive identical entries)
+- `ProjectPanel.tsx` — `MiniPreview` thumbnail shown above scene name in project list; children prop threaded through `SceneRow`
+- `EnginePreview.tsx` — exported `PREVIEW_COLS = 96` and `PREVIEW_ROWS = 36` constants
+- `App.tsx` — statusbar grid dimensions derived from exported constants (no more magic string); viewport lock copy updated to `fosfor.app`
+- `styles.css` — `.effect-controls__select`, `.project-scene-row__thumb/.info`, `.timeline__zoom-label`, `.timeline__ticks` overflow-x, `.timeline__lane` zoom-width via `--timeline-zoom` CSS custom property
+
 ## v0.2.1 — 2025-04
 **Landing page release**
 - `LandingPage.tsx` — animated hero (LoopingPreview, 448×252 CRT bezel), release strip, how-it-works (3 steps with code + static preview), 6-feature grid, 3 live looping examples, Free/Cloud pricing, footer

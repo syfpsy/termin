@@ -136,16 +136,29 @@ type ChangelogEntry = {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    version: 'v0.2.1',
+    version: 'v0.2.2',
     date: '2025-04',
     tag: 'current',
+    items: [
+      'Sound preset dropdown in Effect Controls — pick from 20 presets without typing modifiers',
+      'Clear offset track button now shown alongside clear intensity track',
+      'Timeline zoom: − / + buttons and ⌘+scroll (1×–4×) with ruler sync',
+      'Click anywhere on ruler background to seek — no longer requires clicking a tick label',
+      'Director prompt history — ArrowUp/Down recalls previous prompts',
+      'Scene thumbnails in Project panel — static preview per scene row',
+      'Statusbar grid dimensions derived from engine constants, viewport lock updated to fosfor.app',
+    ],
+  },
+  {
+    version: 'v0.2.1',
+    date: '2025-04',
+    tag: '',
     items: [
       'Landing page: animated hero with looping CRT preview, release strip, how-it-works, live examples, pricing',
       'Docs sub-page: accordion with scene syntax, effects reference, tones, sound presets, keyboard shortcuts',
       'Changelog sub-page: versioned release notes with accordion',
       'Auth gate: landing shown to unauthenticated visitors; "Open the app" allows guest studio access',
       'CRT glow / breathe / glitch keyframes added to styles.css',
-      'package.json version synced to 0.2.1',
     ],
   },
   {
@@ -452,9 +465,9 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
       {/* Latest release strip */}
       <div className="lp-release-strip" aria-label="Latest release">
         <span className="lp-release-strip__label">latest</span>
-        <span className="lp-release-strip__version">v0.2.1</span>
+        <span className="lp-release-strip__version">v0.2.2</span>
         <span className="lp-release-strip__items">
-          Landing page · Docs · Changelog · Auth gate · CRT glow animations
+          Sound picker · Timeline zoom · Ruler seek · Prompt history · Scene thumbnails
         </span>
         <button
           type="button"

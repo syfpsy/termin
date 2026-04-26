@@ -1284,7 +1284,8 @@ input {
 .timeline__ticks {
   position: relative;
   height: 24px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .timeline__tick {
@@ -4031,6 +4032,110 @@ input {
     padding-inline: 7px;
     letter-spacing: 0;
   }
+}
+
+/* ==========================================================================
+   QOL ADDITIONS v0.2.2
+   ========================================================================== */
+
+/* ---- Effect controls: sound select ---- */
+.effect-controls__select {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--bezel-hi);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 2px 4px;
+  height: 22px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%237A8F56'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 20px;
+}
+
+.effect-controls__select:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.effect-controls__select option {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+/* ---- Project panel: scene thumbnails ---- */
+.project-scene-row__select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.project-scene-row__thumb {
+  width: 100%;
+  pointer-events: none;
+}
+
+.project-scene-row__thumb .mini-preview-slot {
+  border-bottom: 1px solid var(--bezel);
+}
+
+.project-scene-row__info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+
+/* ---- Timeline: zoom label ---- */
+.timeline__zoom-label {
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+  padding: 0 2px;
+  min-width: 20px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ---- Timeline: zoom scrolling ---- */
+.timeline__ruler {
+  overflow-x: hidden; /* ruler scrolls in sync via JS scroll-snap not needed */
+}
+
+.timeline__ticks {
+  width: calc(var(--timeline-zoom, 1) * 100%);
+  min-width: 100%;
+}
+
+.timeline__tracks {
+  overflow-x: auto;
+}
+
+.timeline__lane {
+  width: calc(var(--timeline-zoom, 1) * 100%);
+  min-width: 100%;
+}
+
+/* ---- Timeline: ruler click-to-seek cursor ---- */
+.timeline__ticks {
+  cursor: col-resize;
 }
 
 /* ==========================================================================

@@ -1,7 +1,8 @@
 import { Copy, Download, FolderOpen, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { Project, ProjectScene, SceneId } from '../state/projectSchema';
 import { Button, Panel } from './components';
+import { MiniPreview } from './MiniPreview';
 
 type ProjectPanelProps = {
   project: Project;
@@ -113,7 +114,9 @@ export function ProjectPanel({
               onCancelRename={() => setEditingId(null)}
               onDuplicate={() => onDuplicateScene(scene.id)}
               onDelete={() => onDeleteScene(scene.id)}
-            />
+            >
+              <MiniPreview dsl={scene.dsl} />
+            </SceneRow>
           ))}
         </ul>
       </div>
@@ -132,6 +135,7 @@ type SceneRowProps = {
   onCancelRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  children?: ReactNode;
 };
 
 function SceneRow({
@@ -145,6 +149,7 @@ function SceneRow({
   onCancelRename,
   onDuplicate,
   onDelete,
+  children,
 }: SceneRowProps) {
   return (
     <li className={`project-scene-row ${isActive ? 'project-scene-row--active' : ''}`}>
@@ -175,8 +180,11 @@ function SceneRow({
           onDoubleClick={onStartRename}
           title={`Open ${scene.name} (double-click to rename)`}
         >
-          <span className="project-scene-row__name">{scene.name}</span>
-          <span className="project-scene-row__duration">{formatDuration(scene.durationMs)}</span>
+          {children && <div className="project-scene-row__thumb">{children}</div>}
+          <div className="project-scene-row__info">
+            <span className="project-scene-row__name">{scene.name}</span>
+            <span className="project-scene-row__duration">{formatDuration(scene.durationMs)}</span>
+          </div>
         </button>
       )}
       {!isEditing && (

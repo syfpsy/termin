@@ -237,8 +237,10 @@ export function Timeline(props: TimelineProps) {
   const [adderAt, setAdderAt] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [keyframePopover, setKeyframePopover] = useState<{ animationId: string; index: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   const tracksRef = useRef<HTMLDivElement | null>(null);
+  const ticksRef = useRef<HTMLDivElement | null>(null);
   const suppressClickRef = useRef(false);
 
   const selectedEvent = useMemo(() => {
@@ -263,6 +265,17 @@ export function Timeline(props: TimelineProps) {
     }
     return targets;
   }, [scene.events, scene.duration, scene.markers, playheadMs, rate, loopRegion]);
+
+  // Sync ruler ticks scrollLeft with tracks horizontal scroll when zoomed
+  useEffect(() => {
+    const tracks = tracksRef.current;
+    if (!tracks) return;
+    const handler = () => {
+      if (ticksRef.current) ticksRef.current.scrollLeft = tracks.scrollLeft;
+    };
+    tracks.addEventListener('scroll', handler, { passive: true });
+    return () => tracks.removeEventListener('scroll', handler);
+  });
 
   function snap(atMs: number, laneWidthPx: number): { value: number; matched: number | null } {
     const thresholdMs = (SNAP_THRESHOLD_PX / Math.max(1, laneWidthPx)) * scene.duration;
@@ -640,10 +653,33 @@ export function Timeline(props: TimelineProps) {
           <Button active={units === 'ms'} onClick={() => onUnitsChange('ms')}>
             ms
           </Button>
+          <Button
+            aria-label="Zoom out timeline"
+            disabled={zoom === 1}
+            onClick={() => setZoom((z) => Math.max(1, z - 1))}
+          >
+            −
+          </Button>
+          <span className="timeline__zoom-label" aria-label={`Timeline zoom ${zoom}×`}>{zoom}×</span>
+          <Button
+            aria-label="Zoom in timeline"
+            disabled={zoom === 4}
+            onClick={() => setZoom((z) => Math.min(4, z + 1))}
+          >
+            +
+          </Button>
         </>
       }
     >
-      <div className="timeline">
+      <div
+        className="timeline"
+        style={{ '--timeline-zoom': zoom } as React.CSSProperties}
+        onWheel={(e) => {
+          if (!e.metaKey && !e.ctrlKey) return;
+          e.preventDefault();
+          setZoom((z) => e.deltaY < 0 ? Math.min(4, z + 1) : Math.max(1, z - 1));
+        }}
+      >
         <div className="timeline__ruler">
           <div className="timeline__track-head">
             track
@@ -660,7 +696,16 @@ export function Timeline(props: TimelineProps) {
             )}
           </div>
           <div
+            ref={ticksRef}
             className="timeline__ticks"
+            onClick={(e) => {
+              // Bare click on ruler background seeks to that time
+              if ((e.target as HTMLElement).closest('.timeline__tick, .timeline__marker, .timeline__loop-handle')) return;
+              if (e.altKey || e.shiftKey) return; // let pointerDown handle loop region drag
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+              onScrub(Math.round((ratio * scene.duration / 1000) * rate));
+            }}
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).closest('.timeline__tick, .timeline__marker, .timeline__loop-handle')) return;
               if (!e.altKey && !e.shiftKey) return;

@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import { SOUND_PRESETS, isSoundPreset } from '../engine/audio';
 import { sampleEventParam } from '../engine/keyframes';
 import type {
   AnimatableEventParam,
@@ -107,6 +108,13 @@ function EffectControlsBody({
     new RegExp(`(^|\\s)${tone}(\\s|$)`).test(event.modifiers),
   ) ?? 'phos';
 
+  const detectedSound = modifiers.split(/\s+/).reduce<string>((acc, token) => {
+    if (acc) return acc;
+    if (!token.startsWith('sound:')) return acc;
+    const name = token.slice(6);
+    return isSoundPreset(name) ? name : acc;
+  }, '');
+
   const intensityAnim = scene.animations.find(
     (anim) => anim.eventLine === event.line && anim.property === 'intensity',
   );
@@ -212,6 +220,27 @@ function EffectControlsBody({
         </div>
       </div>
 
+      <div className="effect-controls__row">
+        <label htmlFor={`${formId}-sound`}>sound</label>
+        <select
+          id={`${formId}-sound`}
+          className="effect-controls__select"
+          value={detectedSound}
+          onChange={(e) => {
+            const val = e.target.value;
+            const tokens = modifiers.split(/\s+/).filter(Boolean).filter((t) => !t.startsWith('sound:'));
+            const nextMods = val ? [...tokens, `sound:${val}`].join(' ') : tokens.join(' ');
+            setModifiers(nextMods);
+            onPatchEvent(event, { modifiers: nextMods });
+          }}
+        >
+          <option value="">— none —</option>
+          {SOUND_PRESETS.map((preset) => (
+            <option key={preset} value={preset}>{preset}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="effect-controls__row effect-controls__row--animatable">
         <label htmlFor={`${formId}-intensity`}>intensity</label>
         <input
@@ -258,6 +287,15 @@ function EffectControlsBody({
       </div>
 
       <div className="effect-controls__actions">
+        {isOffsetAnimated && offsetAnim && (
+          <button
+            type="button"
+            className="button button--default"
+            onClick={() => onRemoveAnimation(offsetAnim)}
+          >
+            clear offset track
+          </button>
+        )}
         {isIntensityAnimated && intensityAnim && (
           <button
             type="button"
